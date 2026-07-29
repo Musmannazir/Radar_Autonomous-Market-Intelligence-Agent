@@ -1,12 +1,13 @@
 import uuid
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.types import Send
+from langgraph.types import Send, interrupt, Command
 from graph.state import AgentState
 from agents.planner import plan_research
 from agents.researcher import research_question
 from agents.verifier import verify_findings
 from agents.writer import write_briefing
+from agents.deliverer import send_briefing_email
 from tools.vector_store import filter_new_findings
 from config import MAX_LLM_CALLS_PER_RUN
 
@@ -17,8 +18,10 @@ def planner_node(state: AgentState) -> dict:
     print("Sub-questions:", questions)
     return {"sub_questions": questions}
 
+
 def route_to_researchers(state: AgentState):
     return [Send("researcher", {"question": q}) for q in state["sub_questions"]]
+
 
 def researcher_node(state: dict) -> dict:
     question = state["question"]
@@ -30,8 +33,7 @@ def researcher_node(state: dict) -> dict:
 
 def verifier_node(state: AgentState) -> dict:
     findings = state["raw_findings"]
-    # Cap total findings verified per run as a cost guard
-    if len(findings) > MAX_LLM_CALLS_PER_RUN * 3:  # rough claims-per-source estimate
+    if len(findings) > MAX_LLM_CALLS_PER_RUN * 3:
         print(f"[BUDGET] Capping findings from {len(findings)} to stay within budget")
         findings = findings[: MAX_LLM_CALLS_PER_RUN * 3]
 
@@ -40,16 +42,48 @@ def verifier_node(state: AgentState) -> dict:
     print(f"  -> {len(verified)} passed verification, {len(errors)} unverifiable (excluded)")
     return {"verified_findings": verified, "errors": errors}
 
+
 def dedup_node(state: AgentState) -> dict:
     print(f"\nDedup running on {len(state['verified_findings'])} verified findings...")
     new_findings = filter_new_findings(state["verified_findings"], state["run_id"])
     print(f"  -> {len(new_findings)} are genuinely new")
     return {"new_findings": new_findings}
 
+
 def writer_node(state: AgentState) -> dict:
     print(f"\nWriter composing briefing from {len(state['new_findings'])} new findings...")
     briefing = write_briefing(state["watchlist_item"], state["new_findings"])
     return {"briefing_draft": briefing}
+
+
+def deliverer_node(state: AgentState) -> dict:
+    briefing = state["briefing_draft"]
+
+    if not state["new_findings"]:
+        print("No new findings — skipping approval/delivery.")
+        return {"approval_status": "skipped_no_news"}
+
+    # Pause here; execution resumes when main.py calls app.invoke(Command(resume=...), config)
+    decision = interrupt({
+        "briefing_draft": briefing,
+        "message": "Review the briefing. Approve, edit, or reject.",
+    })
+
+    action = decision.get("action", "reject")
+    if action == "approve":
+        final_content = briefing
+    elif action == "edit":
+        final_content = decision.get("content", briefing)
+    else:
+        print("Delivery rejected by human.")
+        return {"approval_status": "rejected"}
+
+    sent = send_briefing_email(
+        subject=f"Radar Briefing: {state['watchlist_item']}",
+        body=final_content,
+    )
+    return {"approval_status": "approved" if sent else "send_failed"}
+
 
 builder = StateGraph(AgentState)
 builder.add_node("planner", planner_node)
@@ -57,13 +91,15 @@ builder.add_node("researcher", researcher_node)
 builder.add_node("verifier", verifier_node)
 builder.add_node("dedup", dedup_node)
 builder.add_node("writer", writer_node)
+builder.add_node("deliverer", deliverer_node)
 
 builder.set_entry_point("planner")
 builder.add_conditional_edges("planner", route_to_researchers, ["researcher"])
 builder.add_edge("researcher", "verifier")
 builder.add_edge("verifier", "dedup")
 builder.add_edge("dedup", "writer")
-builder.add_edge("writer", END)
+builder.add_edge("writer", "deliverer")
+builder.add_edge("deliverer", END)
 
 with SqliteSaver.from_conn_string("db/checkpoints.sqlite") as checkpointer:
     app = builder.compile(checkpointer=checkpointer)
@@ -73,26 +109,47 @@ with SqliteSaver.from_conn_string("db/checkpoints.sqlite") as checkpointer:
         config = {"configurable": {"thread_id": run_id}}
         print("Run ID:", run_id)
 
-        existing_state = app.get_state(config)
-        if existing_state.values:
-            print("Resuming from checkpoint...")
-            result = app.invoke(None, config)
+        initial_state = {
+            "run_id": run_id,
+            "watchlist_item": "New AI agent frameworks and MCP tooling releases",
+            "sub_questions": [],
+            "raw_findings": [],
+            "verified_findings": [],
+            "new_findings": [],
+            "briefing_draft": "",
+            "approval_status": "pending",
+            "errors": [],
+        }
+
+        result = app.invoke(initial_state, config)
+
+        # Check if the graph paused at the interrupt (waiting for human approval)
+        state_snapshot = app.get_state(config)
+        if state_snapshot.next:  # graph has a pending node -> we're paused at interrupt()
+            interrupt_payload = state_snapshot.tasks[0].interrupts[0].value
+            print("\n" + "=" * 60)
+            print("BRIEFING AWAITING APPROVAL:")
+            print("=" * 60)
+            print(interrupt_payload["briefing_draft"])
+
+            print("\nApprove and send? (y = approve / e = edit / anything else = reject):")
+            choice = input("> ").strip().lower()
+
+            if choice == "y":
+                decision = {"action": "approve"}
+            elif choice == "e":
+                new_content = input("Enter edited content:\n> ")
+                decision = {"action": "edit", "content": new_content}
+            else:
+                decision = {"action": "reject"}
+
+            result = app.invoke(Command(resume=decision), config)
+            print("\nFinal status:", result.get("approval_status"))
         else:
-            print("Starting fresh run...")
-            initial_state = {
-                "run_id": run_id,
-                "watchlist_item": "Open-source LLM releases and AI tooling",
-                "sub_questions": [],
-                "raw_findings": [],
-                "verified_findings": [],
-                "new_findings": [],
-                "briefing_draft": "",
-                "approval_status": "pending",
-                "errors": [],
-            }
-            result = app.invoke(initial_state, config)
+            # No interrupt was hit (e.g. no new findings, deliverer skipped itself)
+            print("\nFinal status:", result.get("approval_status"))
 
         print("\n" + "=" * 60)
         print("FINAL BRIEFING:")
         print("=" * 60)
-        print(result["briefing_draft"])
+        print(result.get("briefing_draft", "(none)"))

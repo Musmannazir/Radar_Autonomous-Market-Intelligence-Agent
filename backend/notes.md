@@ -52,3 +52,23 @@ stated" from the project requirements, rather than just checking a string.
 on llama3.2:3b (works fine on Groq's 70B). Fixed with a fallback: on batch
 parse failure, retry each claim individually instead of dropping the whole
 batch — recovers partial signal instead of failing closed on everything.
+
+## Failure 8: Confirmed vs flagged claims rendered identically in the briefing
+A claim combining two unrelated facts ("MCP-X framework" + "fraud detection
+outcomes" from a YouTube source) passed verification at confidence=0.5
+("flagged") and was written into the briefing with the same confidence and
+tone as fully-confirmed claims. The brief requires "low-confidence items are
+flagged, not stated" — but the Writer wasn't distinguishing between them
+visually. Fixed by splitting confirmed (>=0.7) and flagged (0.5-0.69) findings
+into separate, explicitly-labeled sections in the Writer prompt, so a reader
+can immediately tell which claims deserve more scrutiny before acting on them.
+
+## Known limitation: CLI approval blocks unattended scheduled runs
+main.py's human-in-the-loop approval uses input(), which requires an
+interactive terminal. When triggered by APScheduler for a truly unattended
+early-morning run, there's no one present to respond to the approval prompt,
+so the run would hang indefinitely rather than completing. A production
+version would need a different approval channel (e.g. a web link, Telegram
+bot with inline buttons, or Slack approval workflow) that doesn't block on
+local terminal input. Documented as a known gap rather than solved, since
+building a full approval UI is beyond this capstone's scope.
