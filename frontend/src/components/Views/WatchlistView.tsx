@@ -6,7 +6,7 @@ interface WatchlistViewProps {
   onAddWatchlist: (topic: WatchlistTopic) => void;
   onToggleStatus: (id: string) => void;
   onDeleteWatchlist: (id: string) => void;
-  onRunResearchModal: () => void;
+  onRunResearchModal: (watchlist?: { watchlistItemId: number; topic: string }) => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
@@ -189,7 +189,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        onClick={onRunResearchModal}
+                        onClick={() => onRunResearchModal({ watchlistItemId: Number(wl.id), topic: wl.name })}
                         title="Run Autonomous Research Now"
                         className="p-1.5 hover:bg-white/10 text-indigo-400 hover:text-white rounded-lg transition-colors"
                       >

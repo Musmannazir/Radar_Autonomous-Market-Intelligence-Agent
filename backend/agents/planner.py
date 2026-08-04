@@ -1,8 +1,14 @@
 import json
-from config import GROQ_API_KEY
 from langchain_ollama import ChatOllama
 
-llm = ChatOllama(model="llama3.2:3b", temperature=0)
+llm = None
+
+
+def get_llm():
+    global llm
+    if llm is None:
+        llm = ChatOllama(model="llama3.2:3b", temperature=0)
+    return llm
 
 PLANNER_PROMPT = """You are a research planner. Given a topic, break it into 3-5 specific, \
 searchable research questions that would surface recent, concrete news or developments.
@@ -15,7 +21,7 @@ Respond with ONLY a JSON array of strings, no preamble, no markdown fences. Exam
 
 def plan_research(topic: str) -> list[str]:
     prompt = PLANNER_PROMPT.format(topic=topic)
-    response = llm.invoke(prompt)
+    response = get_llm().invoke(prompt)
     text = response.content.strip()
     # strip accidental markdown fences
     text = text.replace("```json", "").replace("```", "").strip()

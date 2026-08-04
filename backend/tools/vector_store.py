@@ -1,5 +1,6 @@
 import chromadb
 from chromadb.utils import embedding_functions
+from tools.db import log_finding
 
 CHROMA_PATH = "db/chroma"
 COLLECTION_NAME = "radar_findings"
@@ -36,6 +37,7 @@ def add_finding(claim: str, source_url: str, run_id: str, coll=None):
         metadatas=[{"source_url": source_url, "run_id": run_id}],
         ids=[f"{run_id}::{hash(claim)}"],
     )
+    log_finding(run_id, claim, source_url, confidence=None, is_new=True)
 
 def filter_new_findings(findings: list[dict], run_id: str, coll=None) -> list[dict]:
     coll = coll or collection

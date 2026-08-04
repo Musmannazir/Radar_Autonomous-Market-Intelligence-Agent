@@ -1,9 +1,15 @@
 import json
 from tools.search import search_web
-from tools.reader import fetch_page
 from langchain_ollama import ChatOllama
 
-llm = ChatOllama(model="llama3.2:3b", temperature=0)
+llm = None
+
+
+def get_llm():
+    global llm
+    if llm is None:
+        llm = ChatOllama(model="llama3.2:3b", temperature=0)
+    return llm
 
 EXTRACT_PROMPT = """You are extracting factual claims from a webpage's text, relevant to this question:
 "{question}"
@@ -32,7 +38,7 @@ def research_question(question: str, max_results: int = 3) -> list[dict]:
             content=content[:3000],
         )
         try:
-            response = llm.invoke(prompt)
+            response = get_llm().invoke(prompt)
             text = response.content.strip().replace("```json", "").replace("```", "").strip()
             claims = json.loads(text)
             if isinstance(claims, list):

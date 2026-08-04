@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Briefing } from '../../types';
-import { radarApi, pollRunUntilSettled, RunStatus } from '../../api/radarApi';
+import { radarApi, RunStatus } from '../../api/radarApi';
 
 interface RunResearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onLaunchStarted: (runId: string, topic: string) => void;
   onResearchCompleted: (newBriefing: Briefing) => void;
   onAwaitingApproval: (runId: string, topic: string, briefingDraft: string) => void;
+  watchlistItemId?: number;
+  initialTopic?: string;
 }
 
 const PIPELINE_STAGES = [
@@ -70,10 +73,13 @@ const StageIcon: React.FC<{ state: StageState }> = ({ state }) => {
 export const RunResearchModal: React.FC<RunResearchModalProps> = ({
   isOpen,
   onClose,
+  onLaunchStarted,
   onResearchCompleted,
   onAwaitingApproval,
+  watchlistItemId,
+  initialTopic,
 }) => {
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState(initialTopic || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<string>('queued');
@@ -85,6 +91,16 @@ export const RunResearchModal: React.FC<RunResearchModalProps> = ({
       if (stopPollRef.current) stopPollRef.current();
     };
   }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTopic(initialTopic || '');
+      setErrorMsg(null);
+      setCurrentStep(null);
+      setRunStatus('queued');
+      setIsProcessing(false);
+    }
+  }, [isOpen, initialTopic]);
 
   if (!isOpen) return null;
 
@@ -119,28 +135,15 @@ export const RunResearchModal: React.FC<RunResearchModalProps> = ({
     setRunStatus('queued');
 
     try {
-      const { run_id } = await radarApi.startRun(currentTopic);
+      const response = watchlistItemId
+        ? await radarApi.startWatchlistRun(watchlistItemId, currentTopic)
+        : await radarApi.startRun(currentTopic);
+      const { run_id } = response;
 
-      stopPollRef.current = pollRunUntilSettled(
-        run_id,
-        (status) => {
-          setRunStatus(status.status);
-          setCurrentStep(status.current_step ?? null);
-
-          if (status.status === 'awaiting_approval') {
-            onAwaitingApproval(run_id, currentTopic, status.briefing_draft || '');
-            setIsProcessing(false);
-            setTopic('');
-            onClose();
-          } else if (
-            ['approved', 'skipped_no_news', 'send_failed', 'failed'].includes(status.status)
-          ) {
-            finishWithBriefing(run_id, status, currentTopic);
-          }
-        },
-        (err) => setErrorMsg(err.message),
-        2000
-      );
+      onLaunchStarted(run_id, currentTopic);
+      setIsProcessing(false);
+      setTopic('');
+      onClose();
     } catch (err: any) {
       setErrorMsg(
         err?.message || 'Could not reach the Radar backend. Is it running on port 8000?'
@@ -157,8 +160,7 @@ export const RunResearchModal: React.FC<RunResearchModalProps> = ({
         <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-3xl pointer-events-none" />
         <button
           onClick={onClose}
-          disabled={isProcessing}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors disabled:opacity-30"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors"
         >
           <span className="material-symbols-outlined text-lg">close</span>
         </button>

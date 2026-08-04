@@ -28,7 +28,7 @@ export interface AIAgent {
   id: string;
   name: string;
   description: string;
-  status: 'Online' | 'Offline' | 'Busy';
+  status: 'Online' | 'Offline' | 'Busy' | 'Queued' | 'Awaiting Approval';
   model: string;
   lastExecution: string;
   successRate: number;
@@ -36,6 +36,10 @@ export interface AIAgent {
   colorClass: string;
   borderColor: string;
   bgLight: string;
+  runTopic?: string;
+  runId?: string;
+  pipelineState?: 'running' | 'queued' | 'completed' | 'idle' | 'waiting_approval' | 'failed';
+  queuePosition?: number | null;
 }
 
 export interface Briefing {

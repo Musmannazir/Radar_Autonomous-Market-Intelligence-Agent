@@ -1,19 +1,28 @@
 import json
 from collections import defaultdict
-from config import GROQ_API_KEY
-from langchain_groq import ChatGroq
-from tools.reader import fetch_page
 from config import GROQ_API_KEY, VERIFIER_PROVIDER
+from tools.reader import fetch_page
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=GROQ_API_KEY, temperature=0)
 
+def _get_llm():
+    if VERIFIER_PROVIDER == "groq":
+        if not GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY is not configured")
+        from langchain_groq import ChatGroq
+        return ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=GROQ_API_KEY, temperature=0)
 
-if VERIFIER_PROVIDER == "groq":
-    from langchain_groq import ChatGroq
-    llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=GROQ_API_KEY, temperature=0)
-else:
     from langchain_ollama import ChatOllama
-    llm = ChatOllama(model="llama3.2:3b", temperature=0)
+    return ChatOllama(model="llama3.2:3b", temperature=0)
+
+
+llm = None
+
+
+def get_llm():
+    global llm
+    if llm is None:
+        llm = _get_llm()
+    return llm
 
 BATCH_VERIFY_PROMPT = """You are a strict fact-checker. You will be shown several CLAIMS that were \
 supposedly extracted from the SOURCE TEXT below. For EACH claim, judge whether the source text \
@@ -33,7 +42,7 @@ def verify_single(claim: str, source_text: str, source_url: str) -> dict:
     """Fallback: verify one claim at a time when batch parsing fails."""
     prompt = BATCH_VERIFY_PROMPT.format(source_text=source_text, claims_list=f"0. {claim}")
     try:
-        response = llm.invoke(prompt)
+        response = get_llm().invoke(prompt)
         text = response.content.strip().replace("```json", "").replace("```", "").strip()
         results = json.loads(text)
         r = results[0]

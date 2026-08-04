@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { NavTab } from '../../types';
+import { DashboardMetricsResponse } from '../../api/radarApi';
 
 interface HeaderProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   onRunResearchModal: () => void;
   onSearchQuery?: (q: string) => void;
+  dashboard?: DashboardMetricsResponse | null;
 }
 
 const TAB_TITLES: Record<NavTab, { title: string; subtitle: string }> = {
@@ -25,7 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   onSelectTab,
   onRunResearchModal,
-  onSearchQuery
+  onSearchQuery,
+  dashboard
 }) => {
   const [search, setSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -51,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
         <h1 className="text-xl font-semibold text-white tracking-tight flex items-center gap-3">
           <span>{info.title}</span>
           <span className="text-xs font-normal text-slate-400 hidden sm:inline">
-            Status: <span className="text-emerald-400 font-medium">Nominal</span>
+            Status: <span className="text-emerald-400 font-medium">{dashboard?.system.status || 'idle'}</span>
           </span>
         </h1>
       </div>
@@ -107,19 +110,19 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="space-y-2.5 max-h-64 overflow-y-auto">
                 <div className="p-3 rounded-xl bg-white/5 border border-white/5 text-xs space-y-1">
                   <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                    <span className="font-semibold text-amber-400 font-mono">APPROVAL REQUIRED</span>
-                    <span>5m ago</span>
+                    <span className="font-semibold text-amber-400 font-mono">{dashboard?.counts.active_runs ? 'APPROVAL REQUIRED' : 'NO ACTIVE RUNS'}</span>
+                    <span>{dashboard?.counts.active_runs ? 'live' : 'idle'}</span>
                   </div>
-                  <p className="text-slate-100 font-medium text-xs">Quarterly Market Volatility Analysis</p>
-                  <p className="text-slate-400 text-[11px]">82 claim verifications passed. Pending human sign-off.</p>
+                  <p className="text-slate-100 font-medium text-xs">{dashboard?.agent_statuses[0]?.topic || 'No live approval item'}</p>
+                  <p className="text-slate-400 text-[11px]">{dashboard?.counts.findings || 0} findings tracked.</p>
                 </div>
                 <div className="p-3 rounded-xl bg-white/5 border border-white/5 text-xs space-y-1">
                   <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                    <span className="font-semibold text-emerald-400 font-mono">RUN COMPLETED</span>
-                    <span>12m ago</span>
+                    <span className="font-semibold text-emerald-400 font-mono">RUN STATUS</span>
+                    <span>{dashboard?.counts.runs || 0}</span>
                   </div>
-                  <p className="text-slate-100 font-medium text-xs">OpenAI Operator Briefing Generated</p>
-                  <p className="text-slate-400 text-[11px]">Confidence 96% across 14 sources.</p>
+                  <p className="text-slate-100 font-medium text-xs">{dashboard?.briefings?.[0]?.content ? 'Latest briefing available' : 'No briefings yet'}</p>
+                  <p className="text-slate-400 text-[11px]">{dashboard?.counts.briefings || 0} briefings stored.</p>
                 </div>
               </div>
             </div>

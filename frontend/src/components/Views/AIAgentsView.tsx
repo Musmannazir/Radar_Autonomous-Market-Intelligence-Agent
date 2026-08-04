@@ -1,44 +1,24 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AIAgent } from '../../types';
+import { DashboardMetricsResponse } from '../../api/radarApi';
 
 interface AIAgentsViewProps {
   agents: AIAgent[];
-  onDeployAgent: (newAgent: AIAgent) => void;
+  dashboard: DashboardMetricsResponse | null;
   onRunResearchModal: () => void;
 }
 
 export const AIAgentsView: React.FC<AIAgentsViewProps> = ({
   agents,
-  onDeployAgent,
+  dashboard,
   onRunResearchModal
 }) => {
-  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
-  const [agentName, setAgentName] = useState('');
-  const [agentRole, setAgentRole] = useState('Custom Scraper & Summarizer');
-  const [selectedModel, setSelectedModel] = useState('Ollama - llama3.2:3b');
-
-  const handleDeploy = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!agentName.trim()) return;
-
-    const newAgent: AIAgent = {
-      id: `agent-${Date.now()}`,
-      name: agentName,
-      description: agentRole,
-      status: 'Online',
-      model: selectedModel,
-      lastExecution: 'Initialized just now',
-      successRate: 100.0,
-      icon: 'smart_toy',
-      colorClass: 'text-indigo-400',
-      borderColor: 'border-indigo-500/30',
-      bgLight: 'bg-indigo-500/10'
-    };
-
-    onDeployAgent(newAgent);
-    setAgentName('');
-    setIsDeployModalOpen(false);
-  };
+  const active = dashboard?.active_agents ?? 0;
+  const busy = dashboard?.busy_agents ?? 0;
+  const queued = agents.filter((agent) => agent.status === 'Queued').length;
+  const totalRuns = dashboard?.counts.runs ?? 0;
+  const liveAverage = totalRuns > 0 ? Math.max(0, 100 - (dashboard?.counts.new_findings ?? 0) / totalRuns * 100) : 0;
+  const currentRun = dashboard?.agent_statuses.find((entry) => entry.status === 'running' || entry.status === 'queued' || entry.status === 'processing_approval' || entry.status === 'awaiting_approval');
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -47,27 +27,29 @@ export const AIAgentsView: React.FC<AIAgentsViewProps> = ({
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Fleet Operational Status</div>
           <div className="text-3xl font-bold text-white flex items-center gap-2">
-            <span>{agents.filter((a) => a.status === 'Online' || a.status === 'Busy').length} / {agents.length} Online</span>
+            <span>{busy} running / {queued} queued</span>
           </div>
-          <p className="text-xs text-emerald-400 font-mono mt-2">100% health rating</p>
+          <p className="text-xs text-emerald-400 font-mono mt-2">
+            {active} active runs across {agents.length} tracked roles
+          </p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Avg Execution Success</div>
-          <div className="text-3xl font-bold text-emerald-400 font-mono">99.1%</div>
-          <p className="text-xs text-indigo-300 font-mono mt-2">14,210 total executions</p>
+          <div className="text-3xl font-bold text-emerald-400 font-mono">{liveAverage.toFixed(1)}%</div>
+          <p className="text-xs text-indigo-300 font-mono mt-2">{totalRuns} total runs</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">AI Engine Standard</div>
-          <div className="text-3xl font-bold text-white">Ollama + Groq</div>
-          <p className="text-xs text-purple-300 font-mono mt-2">Sub-second reasoning</p>
+          <div className="text-3xl font-bold text-white">{currentRun?.current_step || 'Idle'}</div>
+          <p className="text-xs text-purple-300 font-mono mt-2">{currentRun?.topic || 'No active research run'}</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Parallel Scraper Threads</div>
-          <div className="text-3xl font-bold text-white">32 Workers</div>
-          <p className="text-xs text-emerald-400 font-mono mt-2">Global proxy rotation</p>
+          <div className="text-3xl font-bold text-white">{agents.length} Roles</div>
+          <p className="text-xs text-emerald-400 font-mono mt-2">Live pipeline stages from backend state</p>
         </div>
       </div>
 
@@ -84,14 +66,7 @@ export const AIAgentsView: React.FC<AIAgentsViewProps> = ({
             className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs border border-white/10 transition-colors flex items-center gap-1.5 font-medium"
           >
             <span className="material-symbols-outlined text-indigo-400 text-base">rocket_launch</span>
-            <span>Test Agent Workflow</span>
-          </button>
-          <button
-            onClick={() => setIsDeployModalOpen(true)}
-            className="px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-[0_4px_12px_rgba(99,102,241,0.4)] transition-all flex items-center gap-1.5"
-          >
-            <span className="material-symbols-outlined text-base">add</span>
-            <span>Deploy Custom Agent</span>
+            <span>Run Selected Watchlist</span>
           </button>
         </div>
       </div>
@@ -117,8 +92,14 @@ export const AIAgentsView: React.FC<AIAgentsViewProps> = ({
                   </span>
                   <span
                     className={`inline-flex items-center gap-1.5 text-[10px] font-mono px-3 py-1 rounded-full ${
-                      ag.status === 'Online'
+                      ag.status === 'Busy'
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : ag.status === 'Queued'
+                        ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                        : ag.status === 'Awaiting Approval'
+                        ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/20'
+                        : ag.status === 'Offline'
+                        ? 'bg-white/5 text-slate-400 border border-white/10'
                         : 'bg-purple-500/10 text-purple-300 border border-purple-500/20 animate-pulse'
                     }`}
                   >
@@ -131,6 +112,23 @@ export const AIAgentsView: React.FC<AIAgentsViewProps> = ({
               {/* Title & Description */}
               <h3 className="text-lg font-bold text-white mb-1.5">{ag.name}</h3>
               <p className="text-xs text-slate-300 leading-relaxed mb-5">{ag.description}</p>
+
+              <div className="mb-4 rounded-2xl bg-white/5 border border-white/10 p-3 text-[11px] font-mono text-slate-300 space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-400">Live run</span>
+                  <span className="text-white truncate max-w-[180px]">{ag.runTopic || 'No active run'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-400">Pipeline state</span>
+                  <span className={ag.status === 'Busy' ? 'text-emerald-400' : ag.status === 'Queued' ? 'text-amber-300' : ag.status === 'Awaiting Approval' ? 'text-cyan-300' : 'text-slate-400'}>
+                    {ag.pipelineState || 'idle'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-400">Queue position</span>
+                  <span className="text-white">{ag.queuePosition ?? '—'}</span>
+                </div>
+              </div>
             </div>
 
             {/* Bottom Performance Metrics */}
@@ -155,77 +153,6 @@ export const AIAgentsView: React.FC<AIAgentsViewProps> = ({
           </div>
         ))}
       </div>
-
-      {/* Deploy Custom Agent Modal */}
-      {isDeployModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
-            <button
-              onClick={() => setIsDeployModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors"
-            >
-              <span className="material-symbols-outlined text-lg">close</span>
-            </button>
-
-            <h3 className="text-lg font-bold text-white mb-1">Deploy Custom AI Agent</h3>
-            <p className="text-xs text-slate-400 mb-5">Extend your multi-agent fleet with specialized capabilities</p>
-
-            <form onSubmit={handleDeploy} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1.5">Agent Name</label>
-                <input
-                  type="text"
-                  required
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  placeholder="e.g. Social Sentiment & Discord Auditor"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1.5">Agent Role & Prompt Objective</label>
-                <textarea
-                  rows={2}
-                  value={agentRole}
-                  onChange={(e) => setAgentRole(e.target.value)}
-                  placeholder="Describe agent behavior, data feeds to scrape, or verification criteria..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1.5">Model Engine Allocation</label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="Ollama llama3.2:3b">Ollama llama3.2:3b (Ultra Fast, High Throughput)</option>
-                  <option value="Groq llama-3.3-70b-versatile">Groq llama-3.3-70b-versatile (Deep Verification & Reasoning)</option>
-                  <option value="Rule Engine">Rule Engine (Determinism / Scrapers)</option>
-                </select>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsDeployModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold"
-                >
-                  Deploy to Fleet
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

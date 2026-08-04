@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { DashboardMetricsResponse } from '../../api/radarApi';
 
 interface ResearchRunsViewProps {
+  dashboard: DashboardMetricsResponse | null;
   onRunResearchModal: () => void;
 }
 
@@ -13,92 +15,69 @@ interface NodeDetail {
   tokensUsed: string;
   model: string;
   outputSummary: string;
+  logs: Array<{
+    timestamp: string;
+    status: string;
+    message: string;
+    details?: unknown;
+  }>;
 }
 
-export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearchModal }) => {
-  const [selectedNode, setSelectedNode] = useState<NodeDetail | null>({
-    id: 'planner-1',
-    label: 'Planner Agent',
-    agent: 'Planner Model',
-    status: 'COMPLETED',
-    latency: '1.2s',
-    tokensUsed: '12.4k',
-    model: 'Ollama - llama3.2:3b',
-    outputSummary: 'Decomposed request into 3 parallel search streams: SEC Filings, Patent Claims, and Academic Preprints.'
+export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ dashboard, onRunResearchModal }) => {
+  const [selectedNode, setSelectedNode] = useState<NodeDetail | null>(null);
+
+  const latestActiveRun = useMemo(() => {
+    return [...(dashboard?.agent_statuses || [])]
+      .filter((entry) => ['running', 'queued', 'processing_approval', 'awaiting_approval'].includes(entry.status))
+      .sort((a, b) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime())[0];
+  }, [dashboard]);
+
+  const pipelineStages = [
+    { id: 'planner', label: 'Planner', agent: 'Planner Agent', model: 'Ollama - llama3.2:3b' },
+    { id: 'researcher', label: 'Researcher', agent: 'Research Agent', model: 'Ollama - llama3.2:3b' },
+    { id: 'verifier', label: 'Verifier', agent: 'Verifier Agent', model: 'Groq - llama-3.3-70b-versatile' },
+    { id: 'dedup', label: 'Dedup', agent: 'Memory / Dedup', model: 'Backend dedup store' },
+    { id: 'writer', label: 'Writer', agent: 'Writer Agent', model: 'Ollama - llama3.2:3b' },
+    { id: 'deliverer', label: 'Deliverer', agent: 'Deliverer Agent', model: 'Rule Engine' },
+  ];
+
+  const activeStep = latestActiveRun?.current_step || null;
+  const currentRunEvents = dashboard?.current_run_events || [];
+
+  const nodes: NodeDetail[] = pipelineStages.map((stage, index) => {
+    const isCurrent = activeStep === stage.id;
+    const isQueued = Boolean(activeStep) && pipelineStages.findIndex((stageItem) => stageItem.id === stage.id) > pipelineStages.findIndex((stageItem) => stageItem.id === activeStep);
+    const stageLogs = currentRunEvents
+      .filter((event) => event.step === stage.id)
+      .map((event) => ({
+        timestamp: event.timestamp,
+        status: event.status,
+        message: event.message || `${event.step} ${event.status}`,
+        details: event.details,
+      }));
+
+    return {
+      id: `${latestActiveRun?.run_id || 'idle'}-${stage.id}`,
+      label: stage.label,
+      agent: latestActiveRun?.topic || 'No active run',
+      status: isCurrent ? 'IN_PROGRESS' : isQueued ? 'QUEUED' : 'COMPLETED',
+      latency: latestActiveRun?.started_at ? 'live' : 'n/a',
+      tokensUsed: dashboard ? String(dashboard.counts.findings) : '0',
+      model: stage.model,
+      outputSummary:
+        stageLogs[stageLogs.length - 1]?.message ||
+        (isCurrent ? `Running ${stage.label.toLowerCase()} stage.` : `No logs yet for ${stage.label.toLowerCase()}.`),
+      logs: stageLogs,
+    };
   });
 
-  const nodes: NodeDetail[] = [
-    {
-      id: 'scheduler-0',
-      label: 'Scheduler Trigger',
-      agent: 'System Event Loop',
-      status: 'COMPLETED',
-      latency: '0.1s',
-      tokensUsed: '0',
-      model: 'Rule Engine',
-      outputSummary: 'Cron trigger fired for Watchlist "AI Agent Frameworks". Initiated session RR-9421-ALPHA.'
-    },
-    {
-      id: 'planner-1',
-      label: 'Planner Agent',
-      agent: 'Planner Model',
-      status: 'COMPLETED',
-      latency: '1.2s',
-      tokensUsed: '12.4k',
-      model: 'Ollama - llama3.2:3b',
-      outputSummary: 'Generated execution graph with 18 target domain queries and structured claims verification matrix.'
-    },
-    {
-      id: 'market-2a',
-      label: 'Market Analyst',
-      agent: 'Web Scraper Fleet',
-      status: 'COMPLETED',
-      latency: '8.4s',
-      tokensUsed: '34.1k',
-      model: 'Ollama - llama3.2:3b',
-      outputSummary: 'Scraped 14 tech blogs and market portal feeds. Extracted 82 preliminary claim candidates.'
-    },
-    {
-      id: 'tech-2b',
-      label: 'Tech Researcher',
-      agent: 'Patent Ingestion Node',
-      status: 'COMPLETED',
-      latency: '12.1s',
-      tokensUsed: '45.8k',
-      model: 'Groq - llama-3.3-70b-versatile',
-      outputSummary: 'Parsed 3 USPTO patent preprints for browser sandbox visual grounding algorithms.'
-    },
-    {
-      id: 'verifier-3',
-      label: 'Verifier Agent',
-      agent: 'Fact Checker Model',
-      status: 'COMPLETED',
-      latency: '9.3s',
-      tokensUsed: '28.2k',
-      model: 'Groq - llama-3.3-70b-versatile',
-      outputSummary: 'Cross-checked 82 claims against ground truth vector embeddings. Score 98.4% precision.'
-    },
-    {
-      id: 'writer-4',
-      label: 'Writer Agent',
-      agent: 'Briefing Synthesizer',
-      status: 'COMPLETED',
-      latency: '6.2s',
-      tokensUsed: '22.3k',
-      model: 'Ollama - llama3.2:3b',
-      outputSummary: 'Synthesized executive markdown report with citation mappings and market impact score.'
-    },
-    {
-      id: 'approval-5',
-      label: 'Human Approval',
-      agent: 'Governance Panel',
-      status: 'IN_PROGRESS',
-      latency: 'Waiting...',
-      tokensUsed: '0',
-      model: 'Policy Ruleset',
-      outputSummary: 'Awaiting human sign-off on Quarterly Market Volatility Report.'
-    }
-  ];
+  const currentNode = selectedNode || nodes[0] || null;
+
+  const renderStatusLabel = (status: NodeDetail['status']) => {
+    if (status === 'IN_PROGRESS') return 'running';
+    if (status === 'QUEUED') return 'queued';
+    return 'done';
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -111,14 +90,14 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
               RUN ID: RR-9421-ALPHA
             </span>
             <span className="text-xs text-emerald-400 font-mono bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-              Status: 6/7 Nodes Completed
+              Status: {dashboard?.counts.active_runs ? `${dashboard.counts.active_runs} active` : 'idle'}
             </span>
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">
-            OpenAI Operator & GUI Automation Pipeline
+            Live Research Runs
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Target Watchlist: AI Agent Frameworks • Initiated by Cron Scheduler (08:45 UTC)
+            Every node shown here comes from the backend run state.
           </p>
         </div>
 
@@ -144,26 +123,26 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Total Tokens Consumed</div>
-          <div className="text-2xl font-bold text-white font-mono">142,800</div>
-          <div className="text-[11px] text-indigo-300 mt-1 font-mono">Cost: ~$0.042 (Ollama + Groq)</div>
+            <div className="text-2xl font-bold text-white font-mono">{dashboard?.counts.runs || 0}</div>
+            <div className="text-[11px] text-indigo-300 mt-1 font-mono">Total runs recorded</div>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Verification Confidence</div>
-          <div className="text-2xl font-bold text-emerald-400 font-mono">98.4%</div>
-          <div className="text-[11px] text-emerald-400 mt-1 font-mono">14/14 claims verified</div>
+            <div className="text-2xl font-bold text-emerald-400 font-mono">{dashboard?.counts.findings ? `${Math.max(0, dashboard.counts.findings - dashboard.counts.new_findings)} verified` : '0 verified'}</div>
+            <div className="text-[11px] text-emerald-400 mt-1 font-mono">{dashboard?.counts.new_findings || 0} new findings</div>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Total Pipeline Latency</div>
-          <div className="text-2xl font-bold text-white font-mono">37.3s</div>
-          <div className="text-[11px] text-purple-300 mt-1 font-mono">3 parallel streams</div>
+            <div className="text-2xl font-bold text-white font-mono">{dashboard?.busy_agents || 0}</div>
+            <div className="text-[11px] text-purple-300 mt-1 font-mono">Currently busy agents</div>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Sources Crawled</div>
-          <div className="text-2xl font-bold text-white font-mono">18 Sources</div>
-          <div className="text-[11px] text-indigo-300 mt-1 font-mono">0 broken proxies</div>
+            <div className="text-2xl font-bold text-white font-mono">{dashboard?.counts.findings || 0}</div>
+            <div className="text-[11px] text-indigo-300 mt-1 font-mono">Live findings</div>
         </div>
       </div>
 
@@ -182,7 +161,7 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
 
         {/* Graph Visual Pipeline Nodes */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3 relative py-2">
-          {nodes.map((n, idx) => {
+          {nodes.length ? nodes.map((n, idx) => {
             const isSelected = selectedNode?.id === n.id;
             const isCompleted = n.status === 'COMPLETED';
 
@@ -203,10 +182,14 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
                   <span className="text-slate-400">STEP 0{idx + 1}</span>
                   <span
                     className={`px-2 py-0.5 rounded-full font-bold ${
-                      isCompleted ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-300 animate-pulse'
+                      n.status === 'COMPLETED'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : n.status === 'IN_PROGRESS'
+                        ? 'bg-amber-500/20 text-amber-300 animate-pulse'
+                        : 'bg-slate-500/20 text-slate-300'
                     }`}
                   >
-                    {isCompleted ? 'DONE' : 'WAIT'}
+                    {renderStatusLabel(n.status)}
                   </span>
                 </div>
 
@@ -219,11 +202,11 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
                 </div>
               </div>
             );
-          })}
+          }) : <div className="col-span-full text-sm text-slate-400">No runs yet. Launch one to populate the pipeline graph.</div>}
         </div>
 
         {/* Selected Node Detailed Inspector Panel */}
-        {selectedNode && (
+        {currentNode && (
           <div className="bg-slate-950/80 border border-white/10 rounded-2xl p-5 animate-in fade-in duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
               <div className="flex items-center gap-3">
@@ -232,16 +215,16 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
                 </div>
                 <div>
                   <h4 className="font-bold text-sm text-white">
-                    Node Execution Logs: {selectedNode.label}
+                    Node Execution Logs: {currentNode.label}
                   </h4>
-                  <p className="text-xs text-slate-400">Model: {selectedNode.model} • Runtime: {selectedNode.latency}</p>
+                  <p className="text-xs text-slate-400">Model: {currentNode.model} • Runtime: {currentNode.latency}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3 text-xs font-mono">
-                <span className="text-slate-400">Tokens: <strong className="text-white">{selectedNode.tokensUsed}</strong></span>
+                <span className="text-slate-400">Tokens: <strong className="text-white">{currentNode.tokensUsed}</strong></span>
                 <span className="text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                  STATUS: {selectedNode.status}
+                  STATUS: {currentNode.status}
                 </span>
               </div>
             </div>
@@ -250,7 +233,29 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ onRunResearc
               <div>
                 <span className="text-[10px] font-mono uppercase text-slate-400">Agent Output Payload:</span>
                 <div className="mt-1.5 p-4 rounded-xl bg-slate-900 border border-white/10 font-mono text-slate-200 text-xs leading-relaxed">
-                  {selectedNode.outputSummary}
+                  {currentNode.outputSummary}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-mono uppercase text-slate-400">Node Logs:</span>
+                <div className="mt-1.5 space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {currentNode.logs.length ? currentNode.logs.map((log, logIndex) => (
+                    <div key={`${currentNode.id}-${logIndex}`} className="p-3 rounded-xl bg-white/5 border border-white/10">
+                      <div className="flex items-center justify-between gap-3 text-[10px] font-mono text-slate-400">
+                        <span>{log.timestamp}</span>
+                        <span className="text-indigo-300">{log.status}</span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-200">{log.message}</div>
+                      {log.details !== undefined && (
+                        <pre className="mt-2 text-[10px] text-slate-400 whitespace-pre-wrap break-words">{JSON.stringify(log.details, null, 2)}</pre>
+                      )}
+                    </div>
+                  )) : (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-slate-400">
+                      No logs recorded yet for this node.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,28 +1,32 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AgentStreamEvent, NavTab } from '../../types';
+import { DashboardMetricsResponse } from '../../api/radarApi';
 
 interface OverviewViewProps {
   agentStream: AgentStreamEvent[];
+  dashboard: DashboardMetricsResponse | null;
   onSelectTab: (tab: NavTab) => void;
   onRunResearchModal: () => void;
 }
 
-const THROUGHPUT_DATA = [
-  { time: '00:00', throughput: 120, claims: 45 },
-  { time: '04:00', throughput: 280, claims: 110 },
-  { time: '08:00', throughput: 890, claims: 340 },
-  { time: '12:00', throughput: 1420, claims: 620 },
-  { time: '16:00', throughput: 1180, claims: 510 },
-  { time: '20:00', throughput: 1650, claims: 780 },
-  { time: '24:00', throughput: 1890, claims: 910 },
-];
-
 export const OverviewView: React.FC<OverviewViewProps> = ({
   agentStream,
+  dashboard,
   onSelectTab,
   onRunResearchModal
 }) => {
+  const watchlists = dashboard?.watchlists?.length || 0;
+  const activeWatchlists = dashboard?.watchlists?.filter((item) => item.active).length || 0;
+  const activeRuns = dashboard?.counts.active_runs || 0;
+  const briefings = dashboard?.counts.briefings || 0;
+  const findings = dashboard?.counts.findings || 0;
+  const throughputData = (dashboard?.runs || []).slice(0, 7).map((run, index) => ({
+    time: run.started_at ? new Date(run.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `Run ${index + 1}`,
+    throughput: index + 1,
+    claims: dashboard?.findings.filter((finding) => finding.run_id === run.id).length || 0,
+  })).reverse();
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Top Banner */}
@@ -40,7 +44,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               Real-Time Market Intelligence Fleet
             </h2>
             <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-              5 specialized self-hosted agents executing continuous search, document scraping, claim verification, and vector memory deduplication across enterprise watchlists.
+              Real backend runs, watchlists, briefings, and findings flowing through the live Radar pipeline.
             </p>
           </div>
 
@@ -73,11 +77,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 blur-3xl pointer-events-none"></div>
           <div className="flex justify-between items-start mb-2">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-tight">Active Watchlists</span>
-            <span className="text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full font-mono">+12%</span>
+            <span className="text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full font-mono">LIVE</span>
           </div>
-          <div className="text-3xl font-bold tracking-tight text-white mb-3">5 Topics</div>
+          <div className="text-3xl font-bold tracking-tight text-white mb-3">{activeWatchlists} / {watchlists || 0}</div>
           <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full w-2/3 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+            <div className="h-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" style={{ width: `${watchlists ? (activeWatchlists / watchlists) * 100 : 0}%` }} />
           </div>
         </div>
 
@@ -89,11 +93,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 blur-3xl pointer-events-none"></div>
           <div className="flex justify-between items-start mb-2">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-tight">Multi-Agent Fleet</span>
-            <span className="text-indigo-300 text-xs font-bold bg-indigo-500/10 px-2 py-0.5 rounded-full font-mono">100%</span>
+            <span className="text-indigo-300 text-xs font-bold bg-indigo-500/10 px-2 py-0.5 rounded-full font-mono">{activeRuns > 0 ? 'ACTIVE' : 'IDLE'}</span>
           </div>
-          <div className="text-3xl font-bold tracking-tight text-white mb-3">5/5 Online</div>
+          <div className="text-3xl font-bold tracking-tight text-white mb-3">{activeRuns} active runs</div>
           <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full w-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
+            <div className="h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" style={{ width: `${Math.min(100, activeRuns * 20)}%` }} />
           </div>
         </div>
 
@@ -105,11 +109,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 blur-3xl pointer-events-none"></div>
           <div className="flex justify-between items-start mb-2">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-tight">Sources Ingested</span>
-            <span className="text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full font-mono">+342</span>
+            <span className="text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full font-mono">REAL</span>
           </div>
-          <div className="text-3xl font-bold tracking-tight text-white mb-3">8,910</div>
+          <div className="text-3xl font-bold tracking-tight text-white mb-3">{findings.toLocaleString()}</div>
           <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full w-[85%] bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+            <div className="h-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" style={{ width: `${Math.min(100, findings)}%` }} />
           </div>
         </div>
 
@@ -121,11 +125,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 blur-3xl pointer-events-none"></div>
           <div className="flex justify-between items-start mb-2">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-tight">Fact Precision</span>
-            <span className="text-amber-400 text-xs font-bold bg-amber-500/10 px-2 py-0.5 rounded-full font-mono">98.4%</span>
+            <span className="text-amber-400 text-xs font-bold bg-amber-500/10 px-2 py-0.5 rounded-full font-mono">{dashboard?.counts.new_findings ? 'WATCH' : 'STABLE'}</span>
           </div>
-          <div className="text-3xl font-bold tracking-tight text-white mb-3">0.01<span className="text-lg font-normal text-slate-400 ml-1">error</span></div>
+          <div className="text-3xl font-bold tracking-tight text-white mb-3">{dashboard?.counts.new_findings ?? 0}<span className="text-lg font-normal text-slate-400 ml-1">new</span></div>
           <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full w-[98%] bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
+            <div className="h-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" style={{ width: `${dashboard?.counts.findings ? ((dashboard.counts.findings - dashboard.counts.new_findings) / dashboard.counts.findings) * 100 : 0}%` }} />
           </div>
         </div>
       </div>
@@ -149,7 +153,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={THROUGHPUT_DATA}>
+              <AreaChart data={throughputData}>
                 <defs>
                   <linearGradient id="colorThroughput" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
@@ -261,7 +265,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
 
         <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-          {agentStream.map((evt) => (
+              {agentStream.length ? agentStream.map((evt) => (
             <div
               key={evt.id}
               className="p-4 rounded-2xl bg-white/5 border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:border-white/10 transition-colors"
@@ -286,7 +290,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </span>
               )}
             </div>
-          ))}
+              )) : (
+                <div className="text-xs text-slate-400 p-4">No live agent activity yet.</div>
+              )}
         </div>
       </div>
     </div>

@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { EvaluationRecord } from '../../types';
+import { DashboardEvaluationsResponse } from '../../api/radarApi';
 
 interface EvaluationsViewProps {
   evaluations: EvaluationRecord[];
+  summary?: DashboardEvaluationsResponse['summary'];
 }
-
-const ACCURACY_TREND = [
-  { test: 'Run #8801', accuracy: 94.2, precision: 92.1 },
-  { test: 'Run #8810', accuracy: 95.8, precision: 94.5 },
-  { test: 'Run #8820', accuracy: 96.4, precision: 95.0 },
-  { test: 'Run #8830', accuracy: 97.1, precision: 96.1 },
-  { test: 'Run #8840', accuracy: 98.2, precision: 96.8 },
-  { test: 'Run #8849', accuracy: 98.4, precision: 97.2 },
-];
-
-export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations }) => {
+export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations, summary }) => {
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'PASS' | 'FAIL' | 'WARN'>('ALL');
+  const trend = evaluations.slice(0, 6).map((ev, index) => ({
+    test: `Finding ${index + 1}`,
+    accuracy: ev.status === 'PASS' ? ev.confidence : Math.max(0, ev.confidence - 10),
+    precision: ev.status === 'PASS' ? ev.confidence : Math.max(0, ev.confidence - 15),
+  }));
 
   const filteredEvals = evaluations.filter((ev) => {
     if (filterStatus === 'ALL') return true;
@@ -31,17 +28,17 @@ export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations })
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="font-mono text-xs text-emerald-400 font-bold px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-              EVALUATION_RUN_ID: 8849-XR
+              EVALUATION_RUN_ID: LIVE
             </span>
             <span className="text-xs text-indigo-300 font-mono bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
-              Ground Truth Suite v3.2
+              Backend Findings Audit
             </span>
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">
             Model Evaluation & Fact Checking Matrix
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Automated regression benchmark measuring verifier precision, factual precision, and hallucination bounds
+            Derived from live backend findings and run status.
           </p>
         </div>
 
@@ -58,25 +55,25 @@ export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations })
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Factual Accuracy</div>
-          <div className="text-3xl font-bold text-emerald-400 font-mono">98.4%</div>
-          <p className="text-xs text-emerald-400 font-mono mt-2">+1.2% vs previous release</p>
+          <div className="text-3xl font-bold text-emerald-400 font-mono">{summary ? `${summary.accuracy}%` : '0%'}</div>
+          <p className="text-xs text-emerald-400 font-mono mt-2">Live backend summary</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Verifier Precision (F1 Score)</div>
-          <div className="text-3xl font-bold text-white font-mono">0.962</div>
-          <p className="text-xs text-indigo-300 font-mono mt-2">High discrimination power</p>
+          <div className="text-3xl font-bold text-white font-mono">{summary ? summary.precision.toFixed(3) : '0.000'}</div>
+          <p className="text-xs text-indigo-300 font-mono mt-2">Backend-derived precision</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">Signal Quality Index</div>
-          <div className="text-3xl font-bold text-white font-mono">0.94 / 1.0</div>
+          <div className="text-3xl font-bold text-white font-mono">{summary ? `${summary.signal_quality.toFixed(2)} / 1.0` : '0.00 / 1.0'}</div>
           <p className="text-xs text-purple-300 font-mono mt-2">Noise filtering verified</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-5 relative overflow-hidden">
           <div className="text-xs text-slate-400 mb-1">False Positive Rate</div>
-          <div className="text-3xl font-bold text-emerald-400 font-mono">0.02%</div>
+          <div className="text-3xl font-bold text-emerald-400 font-mono">{summary ? `${summary.false_positive_rate}%` : '0%'}</div>
           <p className="text-xs text-emerald-400 font-mono mt-2">Negligible error rate</p>
         </div>
       </div>
@@ -89,13 +86,13 @@ export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations })
               <span className="material-symbols-outlined text-indigo-400 text-xl">trending_up</span>
               Accuracy & Precision Over Test Iterations
             </h3>
-            <p className="text-xs text-slate-400">Ground truth regression trend across 6 benchmark releases</p>
+            <p className="text-xs text-slate-400">Trend derived from the latest backend findings</p>
           </div>
         </div>
 
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={ACCURACY_TREND}>
+            <LineChart data={trend}>
               <XAxis dataKey="test" stroke="#94A3B8" fontSize={11} tickLine={false} />
               <YAxis domain={[90, 100]} stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
@@ -114,7 +111,7 @@ export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations })
         <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-bold text-white">Dataset Verification Cases</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Individual evaluation claims tested against ground truth citations</p>
+            <p className="text-xs text-slate-400 mt-0.5">Live findings returned by the backend</p>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs font-mono">

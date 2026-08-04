@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavTab } from '../../types';
+import { DashboardMetricsResponse } from '../../api/radarApi';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -7,6 +8,7 @@ interface SidebarProps {
   onOpenNewWorkspace: () => void;
   onRunResearchModal: () => void;
   unreadApprovalCount?: number;
+  dashboard?: DashboardMetricsResponse | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -14,17 +16,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   onOpenNewWorkspace,
   onRunResearchModal,
-  unreadApprovalCount = 1
+  unreadApprovalCount = 1,
+  dashboard
 }) => {
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [currentWorkspace, setCurrentWorkspace] = useState('Enterprise Intelligence Fleet');
 
   const navItems: { id: NavTab; label: string; icon: string; badge?: string | number; badgeColor?: string }[] = [
     { id: 'overview', label: 'Command Center', icon: 'dashboard' },
-    { id: 'watchlist', label: 'Watchlist Management', icon: 'visibility', badge: '5 Active' },
+    { id: 'watchlist', label: 'Watchlist Management', icon: 'visibility', badge: `${dashboard?.counts.watchlists || 0} Active` },
     { id: 'runs', label: 'Research Runs', icon: 'account_tree' },
-    { id: 'agents', label: 'AI Agents Fleet', icon: 'smart_toy', badge: '5 Online' },
-    { id: 'briefings', label: 'Intelligence Briefings', icon: 'article', badge: '3 New', badgeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30' },
+    { id: 'agents', label: 'AI Agents Fleet', icon: 'smart_toy', badge: `${dashboard?.busy_agents || 0} Busy` },
+    { id: 'briefings', label: 'Intelligence Briefings', icon: 'article', badge: `${dashboard?.counts.briefings || 0} Saved`, badgeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30' },
     { id: 'memory', label: 'Knowledge Memory', icon: 'database' },
     { id: 'evaluations', label: 'Evaluation Dashboard', icon: 'analytics' },
     { id: 'approval', label: 'Human Approval', icon: 'verified_user', badge: unreadApprovalCount, badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold' },

@@ -1,6 +1,13 @@
 from langchain_ollama import ChatOllama
 
-llm = ChatOllama(model="llama3.2:3b", temperature=0)
+llm = None
+
+
+def get_llm():
+    global llm
+    if llm is None:
+        llm = ChatOllama(model="llama3.2:3b", temperature=0)
+    return llm
 WRITER_PROMPT = """You are writing a concise briefing for a team tracking: "{topic}"
 
 Below are NEW, verified findings since the last briefing, split into two groups.
@@ -34,5 +41,5 @@ def write_briefing(topic: str, new_findings: list[dict]) -> str:
         confirmed_text=fmt(confirmed),
         flagged_text=fmt(flagged),
     )
-    response = llm.invoke(prompt)
+    response = get_llm().invoke(prompt)
     return response.content.strip()

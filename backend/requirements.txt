@@ -17,3 +17,5 @@ requests
 tenacity
 langchain-ollama
 tavily-python
+fastapi
+uvicorn
