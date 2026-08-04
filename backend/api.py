@@ -457,20 +457,9 @@ def dashboard_metrics():
 
 @app.get("/dashboard/evaluations")
 def dashboard_evaluations():
-    counts = get_database_counts()
-    findings = list_findings(100)
-    total = counts["findings"] or 1
-    pass_count = max(counts["findings"] - counts["new_findings"], 0)
-    fail_count = counts["new_findings"]
-    return {
-        "summary": {
-            "accuracy": round((pass_count / total) * 100, 2),
-            "precision": round((pass_count / total) * 100, 2),
-            "false_positive_rate": round((fail_count / total) * 100, 2),
-            "signal_quality": round(min(1.0, pass_count / total), 2),
-        },
-        "findings": findings,
-    }
+    from eval.evaluator import run_eval
+    result = run_eval()
+    return result
 
 
 @app.get("/dashboard/settings")

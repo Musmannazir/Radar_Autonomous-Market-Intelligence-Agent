@@ -1,5 +1,6 @@
 langgraph
 langchain-groq
+langchain-ollama
 langsmith
 ddgs
 trafilatura
@@ -10,12 +11,6 @@ chromadb
 apscheduler
 python-dotenv
 langgraph-checkpoint-sqlite
-ddgs
-trafilatura
-beautifulsoup4
-requests
-tenacity
-langchain-ollama
 tavily-python
 fastapi
 uvicorn

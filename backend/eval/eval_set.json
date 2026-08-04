@@ -1,0 +1,66 @@
+[
+  {
+    "id": "eval_001",
+    "claim": "OpenAI released GPT-5 in 2024",
+    "source_url": "https://openai.com",
+    "expected_verdict": "confirmed",
+    "category": "product_launch",
+    "notes": "Verifiable public announcement"
+  },
+  {
+    "id": "eval_002",
+    "claim": "Google acquired Anthropic for $50 billion",
+    "source_url": "https://anthropic.com",
+    "expected_verdict": "rejected",
+    "category": "hallucination",
+    "notes": "False — Anthropic is independent"
+  },
+  {
+    "id": "eval_003",
+    "claim": "The EU AI Act was passed in 2024",
+    "source_url": "https://digital-strategy.ec.europa.eu",
+    "expected_verdict": "confirmed",
+    "category": "regulation",
+    "notes": "Verifiable public record"
+  },
+  {
+    "id": "eval_004",
+    "claim": "Apple released an AI chip called M5 in 2025",
+    "source_url": "https://apple.com",
+    "expected_verdict": "flagged",
+    "category": "product_launch",
+    "notes": "Partially verifiable — may be accurate but unconfirmed"
+  },
+  {
+    "id": "eval_005",
+    "claim": "Hugging Face was founded in Antarctica",
+    "source_url": "https://huggingface.co",
+    "expected_verdict": "rejected",
+    "category": "hallucination",
+    "notes": "False — founded in New York"
+  },
+  {
+    "id": "eval_006",
+    "claim": "Meta released Llama 3 as open-source",
+    "source_url": "https://ai.meta.com",
+    "expected_verdict": "confirmed",
+    "category": "product_launch",
+    "notes": "Verifiable public release"
+  },
+  {
+    "id": "eval_007",
+    "claim": "Tesla uses Ollama for its chatbot",
+    "source_url": "https://tesla.com",
+    "expected_verdict": "rejected",
+    "category": "hallucination",
+    "notes": "Unverifiable / fabricated"
+  },
+  {
+    "id": "eval_008",
+    "claim": "NVIDIA's market cap exceeded $3 trillion in 2024",
+    "source_url": "https://nvidia.com",
+    "expected_verdict": "confirmed",
+    "category": "financial",
+    "notes": "Verifiable from public records"
+  }
+]

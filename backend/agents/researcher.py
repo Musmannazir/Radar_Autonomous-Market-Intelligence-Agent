@@ -1,7 +1,20 @@
 import json
 import re
 from tools.search import search_web
+from tools.run_events import record_cost
+from config import MAX_SEARCH_CALLS_PER_RUN
 from langchain_ollama import ChatOllama
+
+# Module-level search budget shared across parallel researchers in a run.
+_searches_used = 0
+
+
+def _can_search() -> bool:
+    global _searches_used
+    if _searches_used < MAX_SEARCH_CALLS_PER_RUN:
+        _searches_used += 1
+        return True
+    return False
 
 llm = None
 
@@ -49,6 +62,7 @@ def _parse_json_array(text: str) -> list:
 
     return []
 
+
 EXTRACT_PROMPT = """You are extracting factual claims from a webpage's text, relevant to this question:
 "{question}"
 
@@ -62,14 +76,19 @@ Only include claims explicitly supported by the text above. If nothing relevant,
 No markdown fences, no preamble.
 """
 
-def research_question(question: str, max_results: int = 3) -> list[dict]:
+
+def research_question(question: str, max_results: int = 3, run_id: str = "") -> list[dict]:
     findings = []
+    if not _can_search():
+        print(f"[research_question] Search budget exhausted — skipping '{question}'")
+        return findings
     results = search_web(question, max_results=max_results)
+    record_cost(run_id, search_calls=1)
 
     for r in results:
         content = r.get("content", "")
         if not content or len(content.strip()) < 100:
-            continue  # skip thin/empty results, same spirit as before
+            continue
 
         prompt = EXTRACT_PROMPT.format(
             question=question,
@@ -77,6 +96,7 @@ def research_question(question: str, max_results: int = 3) -> list[dict]:
         )
         try:
             response = get_llm().invoke(prompt)
+            record_cost(run_id, llm_calls=1)
             text = response.content.strip()
             claims = _parse_json_array(text)
             if isinstance(claims, list):
@@ -94,8 +114,3 @@ def research_question(question: str, max_results: int = 3) -> list[dict]:
             continue
 
     return findings
-
-if __name__ == "__main__":
-    results = research_question("What is the latest open-source LLM release and its impact on natural language processing?")
-    for f in results:
-        print(f"- {f['claim']}\n  ({f['source_url']})")
