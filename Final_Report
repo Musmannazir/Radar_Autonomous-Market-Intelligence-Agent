@@ -1,0 +1,273 @@
+# Radar Autonomous Market Intelligence Agent — Poora Backend Analysis (Roman Urdu)
+
+Yeh report aap ke project ke **pooray backend** ki tafseel hai. Har file ka maqsad, kyun banai gai, graph/subgraph kahaan hai, database structure, agents, tools, API — sab kuch. Frontend aur .env file ki values yahan nahi hain (aap ki request ke mutabiq).
+
+---
+
+## 1. Project kya hai (Ek Nazar Mein)
+
+Yeh ek **autonomous market intelligence agent** hai. Matlab: aap ek "watchlist" item (topic) banate hain, aur yeh system khud:
+1. Research questions banata hai (Planner)
+2. Web search karke claims collect karta hai (Researcher)
+3. Un claims ko verify karta hai ke wo sach hain ya nahi (Verifier)
+4. Purani (duplicate) news ko filter karta hai (Dedup)
+5. Ek briefing report likhta hai (Writer)
+6. Aap ki approval ke baad email karta hai (Deliverer)
+
+Yeh sab ek **LangGraph state machine** (flow diagram) ke through chalta hai. Aage har hissa samjhate hain.
+
+---
+
+## 2. Directory Structure (Backend)
+
+```
+backend/
+├── main.py            → LangGraph ka poora pipeline (graph) yahan banata hai
+├── api.py             → FastAPI server — frontend isse baat karta hai
+├── config.py          → .env file load karta hai, saari settings
+├── scheduler.py       → Roz subah 8 baje automatic run karta hai
+├── notes.md           → Engineering failures ki diary (8 failures)
+├── requirements.txt   → Saari Python libraries ki list
+├── agents/
+│   ├── planner.py     → Research questions banata hai
+│   ├── researcher.py  → Web search + claims nikaalta hai
+│   ├── verifier.py    → Claims verify karta hai
+│   ├── writer.py      → Briefing report likhta hai
+│   └── deliverer.py   → Email bhejta hai
+├── graph/
+│   ├── state.py       → Data ka structure (AgentState) define karta hai
+│   └── supervisor.py  → Graph banane ka wrapper
+├── tools/
+│   ├── db.py          → SQLite database ke saare functions
+│   ├── search.py      → Tavily web search wrapper
+│   ├── reader.py      → Website ka content padhta hai
+│   ├── vector_store.py → ChromaDB — duplicate claims ki memory
+│   ├── run_events.py  → Run ke events yaad rakhta hai (in-memory)
+│   ├── email.py       → KHALI FILE (kaam deliverer.py mein hai)
+│   └── debug_embed.py → Embedding test karne wala script
+├── db/
+│   ├── schema.sql     → Tables banane ka SQL
+│   ├── radar.sqlite   → Aap ka asli database
+│   ├── checkpoints.sqlite → LangGraph ke checkpoints (resume karne ke liye)
+│   └── chroma/        → ChromaDB ka data folder
+└── tests/
+    └── test_imports.py → Import test
+```
+
+---
+
+## 3. Graph / Subgraph — Kahan Hai?
+
+**Aap ka poora graph `backend/main.py` mein hai.** Yeh ek hi LangGraph state machine hai — koi alag subgraph nahi bana. (LangGraph mein subgraphs bante jab aap chhote graphs ko bare graph ke andar daalte; aap ke project mein aisa nahi hai.)
+
+### Graph ka structure (flow):
+
+```
+START
+  │
+  ▼
+PLANNER ──(topic ko 3-5 questions mein todta hai)──▶ RESEARCHER (PARALLEL)
+  │                                                        │
+  │            Har question ke liye 1 researcher chalta hai │
+  │            (LangGraph ka "Send" mechanism)              │
+  ▼                                                        ▼
+                          VERIFIER (claims check)
+  │                                                        │
+  ▼                                                        ▼
+                          DEDUP (duplicates hatao)
+  │                                                        │
+  ▼                                                        ▼
+                          WRITER (briefing likho)
+  │                                                        │
+  ▼                                                        ▼
+                          DELIVERER (approval + email)
+  │                                                        │
+  ▼                                                        ▼
+                          END
+```
+
+### Key points:
+- **Nodes** (steps): `planner`, `researcher`, `verifier`, `dedup`, `writer`, `deliverer`
+- **Entry point**: `planner`
+- **Parallel fan-out**: Planner ke baad, har sub-question ke liye **alag researcher node** parallel chalta hai (code mein `route_to_researchers` function yeh karta hai — har question ke liye ek `Send()` bhejta hai)
+- **State**: Saara data `AgentState` (graph/state.py) mein rehta hai. `raw_findings` aur `errors` ka `operator.add` reducer hai — matlab parallel researchers ke results sab accumulate hote hain, ek doosre ko overwrite nahi karte
+- **Human-in-the-loop**: `deliverer_node` mein `interrupt()` hai — yahan pipeline ruk jaati hai aur aap ki approval ka wait karti hai (approve / edit / reject)
+- **Checkpointing**: Graph `SqliteSaver` ke saath compile hota hai jo state ko `db/checkpoints.sqlite` mein save karta hai. Agar app band ho jaye to bhi run ko wahan se resume kiya ja sakta hai
+
+### `graph/supervisor.py` — naam theek hai kaam alag
+Is file ka naam "supervisor" hai lekin **yeh koi supervisor agent nahi hai**. Yeh sirf ek chhota wrapper hai jo `main.py` se `build_app()` import kar ke graph return karta hai. Matlab naam se dhoka mat khana — asli kaam `main.py` mein hai.
+
+---
+
+## 4. Main Entry Points (3 fileein)
+
+### `main.py` — Graph ka dil
+- **Maqsad**: Poore pipeline ka definition. 6 node functions yahan hain: `planner_node`, `researcher_node`, `verifier_node`, `dedup_node`, `writer_node`, `deliverer_node`
+- `build_app()` function graph ko compile karta hai (checkpoints ke saath)
+- `_CHECKPOINTER_CONTEXTS` — checkpoint connections ko zinda rakhta hai taake waqt se pehle close na ho
+- **Agar aap `python main.py` chalate hain** to yeh CLI demo mode mein chalta hai — ek interactive approval prompt (input()) deta hai
+
+### `api.py` — FastAPI server
+- **Maqsad**: Frontend ko backend se jorta hai. Saare API endpoints yahan hain (poori list section 8 mein)
+- `_run_graph()` — ek daemon thread mein graph chalata hai aur har node ke updates ko live track karta hai
+- `_resume_graph()` — paused run ko resume karta hai jab aap approval dete hain
+- CORS sab origins ke liye khula hai (development ke liye)
+- `AGENT_FLEET_TEMPLATE` — agents ki list with icons/colors (dashboard display ke liye)
+
+### `scheduler.py` — Automatic run
+- **Maqsad**: Roz subah **08:00** baje ek cron job chalata hai
+- Ye `main.py` ko subprocess ke through run karta hai (matlab CLI demo mode, API nahi)
+- **Note/limitation**: CLI mode mein approval ka `input()` prompt hota hai, is liye scheduled run wahan atak sakta hai (notes.md mein yeh documented hai)
+
+---
+
+## 5. Agents (5 Agents — Har Ek Ka Kaam)
+
+### `planner.py` — Planner Agent
+- **Kyun bana**: Ek bare topic ko chhote research questions mein todne ke liye
+- **Kaam**: `plan_research(topic)` — Ollama `llama3.2:3b` model se prompt bhejta hai ke 3-5 searchable questions ki JSON array banao. JSON parse hone par list return hoti hai, warna empty list
+- **Detail**: Temperature 0 (deterministic output), markdown fences strip karta hai
+
+### `researcher.py` — Researcher Agent
+- **Kyun bana**: Web se asli claims collect karne ke liye
+- **Kaam**: `research_question(question, max_results=3)` — `search_web()` se top 3 results lata hai, 100 chars se chhoti content skip karta hai, phir LLM se claim strings nikaalta hai
+- **Khaas fix**: Source URL ko LLM ke bharose nahi chhorta — code mein programmatically asli search result ki URL attach karta hai (kyunki LLM hallucinated URLs deta tha — notes.md Failure #1)
+- Output: `{claim, source_url, confidence: None, is_new: None}`
+
+### `verifier.py` — Verifier Agent (sab se complex)
+- **Kyun bana**: Hallucinations (jhoothe claims) rokne ke liye — yeh anti-hallucination layer hai
+- **Kaam**: `verify_findings(findings)` — claims ko source URL ke hisaab se group karta hai aur har source ki pages dobara padhta hai (reader.py), phir batch mein verify karta hai
+- **LLM selection**: `VERIFIER_PROVIDER` config ke mutabiq — `groq` (llama-3.3-70b-versatile) ya `ollama` (llama3.2:3b). Default ollama
+- **Verdicts**: `confirmed` | `flagged` | `rejected` | `error`
+  - Sirf `confirmed` ya `flagged` + confidence ≥ 0.5 wale pass hote hain
+  - `error` verdict hamesha fail hote hain (fail-closed) — yeh sahi design hai
+- **Batching**: Claims per-source group karke batch JSON mein verify kiye jate hain (LLM calls 4-5x kam). Agar batch JSON parse fail ho to per-claim fallback retry
+- **Confidence check**: `MIN_CONFIDENCE = 0.5` — sirf verdict hi nahi, confidence score bhi check hota hai
+
+### `writer.py` — Writer Agent
+- **Kyun bana**: Final briefing report likhne ke liye
+- **Kaam**: `write_briefing(topic, new_findings)` — findings ko 2 groups mein todta hai:
+  - High confidence (≥0.7) → "confirmed facts" section
+  - Low confidence (0.5-0.69) → "Unconfirmed / needs review" section
+- Har claim ke saath "why it matters" note + source URL
+- Findings empty hon to "No new developments" string
+
+### `deliverer.py` — Deliverer Agent
+- **Kyun bana**: Final briefing ko email karne ke liye
+- **Kaam**: `send_briefing_email(subject, body)` — Gmail SMTP (`smtp.gmail.com:465`, SSL) ke through email bhejta hai. App password se login, default recipient khud (aap ki email)
+- **Note**: `tools/email.py` file khali hai — asli email code YAHAN hai
+- Iska graph node (deliverer_node) approval ke liye rukta hai, phir email bhejta hai
+
+---
+
+## 6. Tools (Helper Functions)
+
+### `db.py` — Database ka sab kuch
+- **Maqsad**: SQLite ke saare operations yahan hain
+- Functions: `ensure_schema()`, `init_db()`, `add_watchlist_item()`, `list_watchlists()`, `create_run()`, `update_run_status()`, `log_finding()`, `list_findings()`, `log_briefing()`, `get_database_counts()`, `get_run_rows()`, `get_recent_briefings()`
+- `TERMINAL_RUN_STATUSES` = approved, rejected, skipped_no_news, send_failed, failed
+- `ensure_schema()` idempotent hai — bar bar chale to bhi tables ko ALTER karta hai (watchlist mein category, frequency, priority, description, icon columns add karta hai)
+
+### `search.py` — Web Search
+- **Maqsad**: Tavily API ka wrapper
+- `search_web(query, max_results=5)` — tenacity se retry (3 attempts, exponential backoff 2-10s). Kabhi raise nahi karta — fail ho to `[]` return karta hai
+- Return: `{title, url, snippet, content}`
+
+### `reader.py` — Page Reader
+- **Maqsad**: Kisi website ka content nikaalna
+- `fetch_page(url)` — requests se page fetch, phir `trafilatura.extract()` se main content. Agar wo kaam na kare to BeautifulSoup (`stripped_strings`, 5000 chars cap)
+- 100 chars se kam content = failure. Kabhi raise nahi karta, hamesha `{content, source_url, fetched_at, success}` return karta hai
+- User-Agent: "Radar research bot"
+
+### `vector_store.py` — Memory + Dedup (ChromaDB)
+- **Maqsad**: Pehle se dekh hi chuke claims ko yaad rakhna taake duplicate news dobara na aaye
+- ChromaDB persistent collection `radar_findings`, **cosine distance** (fix kiya gaya tha — pehle Chroma default squared-L2 use karta tha, is liye dedup galat chalta tha. notes.md Failure #3)
+- `is_duplicate(claim, threshold=0.75)` — top-1 match se similarity = 1 - distance
+- `filter_new_findings()` — sirf naye claims pass karta hai
+- Document id: `f"{run_id}::{hash(claim)}"`, metadata: `{source_url, run_id}`
+
+### `run_events.py` — Live Events
+- **Maqsad**: Har run ke live events ko memory mein rakhta hai (step, status, timestamp, message)
+- Thread-safe hai (`threading.Lock` ke saath), dashboard ko live progress dikhane ke liye
+
+### `debug_embed.py` — Debugging Script
+- **Maqsad**: Embeddings test karne ke liye standalone script (Chroma distance bug investigate karte waqt banaya tha). Vector dimensions, norm, cosine similarity print karta hai
+
+### `email.py` — KHALI FILE
+- Yahan kuch nahi hai. Email ka asli code `agents/deliverer.py` mein hai. Yeh file dead code hai — delete kar sakte hain
+
+---
+
+## 7. Database (Do SQLite + Ek Vector Store)
+
+### `schema.sql` — 4 tables ka definition:
+1. **watchlist** — `id, topic, active` (aap jis topics par nazar rakhna chahte hain)
+2. **runs** — `id (uuid), item_id, status, started_at, completed_at` (har pipeline run)
+3. **findings** — `run_id, claim, source_url, confidence, is_new` (verified claims)
+4. **briefings** — `run_id, content, sent_at` (bheje gaye reports)
+
+### `radar.sqlite` — Asli database
+- watchlist table mein 5 extra columns (category, frequency, priority, description, icon) ensure_schema ne add kiye
+- Filhaal: 2 watchlists, 15 runs, 0 findings, 0 briefings (abhi tak koi nayi news nahi mili ya verify pass nahi hui)
+
+### `checkpoints.sqlite` — LangGraph ka state save
+- Jab pipeline interrupt/resume karta hai, state yahan save hota hai (122 checkpoints, 531 writes)
+- Yehi wajah hai ke aap approval ke baad run ko resume kar sakte hain
+
+### `chroma/` — Vector store (dedup memory)
+
+---
+
+## 8. API Endpoints (FastAPI)
+
+| Method | Path | Kaam |
+|---|---|---|
+| POST | `/runs` | Naya run shuru (topic ya watchlist_item_id se) |
+| POST | `/watchlists/{item_id}/run` | Existing watchlist item ka run |
+| POST | `/watchlists` | Naya watchlist banayein |
+| GET | `/watchlists` | Saari watchlists dekhein |
+| PATCH | `/watchlists/{item_id}` | Active flag set karein |
+| DELETE | `/watchlists/{item_id}` | Watchlist delete karein |
+| GET | `/runs/{run_id}` | Run ki live status |
+| GET | `/runs?limit=50` | Runs ki list (watchlist topic ke saath) |
+| GET | `/approvals/pending` | Approval ke wait kar rahe runs |
+| GET | `/dashboard/metrics` | Dashboard ka poora data (agents, fleet, memory, system) |
+| GET | `/dashboard/evaluations` | Accuracy, precision, false-positive-rate |
+| GET | `/dashboard/settings` | System info |
+| POST | `/approvals/{run_id}` | Run resume (approve/edit/reject) |
+| GET | `/briefings?limit=20` | Recent briefings |
+| GET | `/health` | Health check |
+
+---
+
+## 9. Config & Requirements
+
+### `config.py`
+- `.env` ko python-dotenv se load karta hai
+- Expose karta hai: `VERIFIER_PROVIDER` (ollama/groq), `TAVILY_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `GROQ_API_KEY`, `DB_PATH = "db/radar.sqlite"`, `MAX_LLM_CALLS_PER_RUN = 25`
+
+### Important Notes (Config Issues):
+- ⚠️ `.env` mein `TAVILLY_API_KEY` likha hai (misspelled) lekin `config.py` `TAVILY_API_KEY` padhta hai. Matlab jab tak dono nahi hain, Tavily configured nahi hoga
+- `requirements.txt` mein `ddgs` (DuckDuckGo search) hai lekin koi code use nahi karta — search sirf Tavily se hoti hai
+- Koi Dockerfile, CI, ya `.langgraph.json` file nahi hai
+
+---
+
+## 10. Tests
+
+### `test_imports.py`
+- Basic import test: API module bina `GROQ_API_KEY` ke bhi clean import ho jata hai — yeh isliye important hai kyunki verifier groq use karta hai lekin agar key na ho to bhi app crash na ho
+
+---
+
+## 11. Cross-Cutting Observations (Ek Nazar Mein)
+
+1. **Do entry points**: `main.py` (CLI demo) aur `api.py` (live server). Dono same graph share karte hain
+2. **Teen data stores**: `radar.sqlite` (app data), `checkpoints.sqlite` (graph state), `chroma/` (dedup memory)
+3. **Khali files**: `tools/email.py`, saare `__init__.py`, root `Final_Report` (ab yeh bharega!) — inhe clean kar sakte hain
+4. **No subgraphs**: Poore project mein sirf 1 LangGraph hai, koi nested graph nahi
+5. **Human-in-the-loop design**: Automations ke bawajood, email bhejne se pehle insaan ki approval zaroori hai — yeh achha design hai (ghalat news forward hone se bachata hai)
+
+---
+
+*Report ka end — Asli code ke saath explore karke banai gai hai.*

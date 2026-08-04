@@ -7,6 +7,7 @@ class Finding(TypedDict):
     source_url: str
     confidence: Optional[float]
     is_new: Optional[bool]
+    source_content: Optional[str]  # cached page text from researcher (avoids re-fetch in verifier)
 
 class AgentState(TypedDict):
     run_id: str

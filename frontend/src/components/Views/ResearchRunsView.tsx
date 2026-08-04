@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardMetricsResponse } from '../../api/radarApi';
 
 interface ResearchRunsViewProps {
@@ -70,6 +70,14 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ dashboard, o
       logs: stageLogs,
     };
   });
+
+  useEffect(() => {
+    if (!nodes.length) return;
+    const activeNode = nodes.find((node) => node.status === 'IN_PROGRESS') || nodes[0];
+    if (!selectedNode || selectedNode.id.startsWith(latestActiveRun?.run_id || '')) {
+      setSelectedNode(activeNode);
+    }
+  }, [latestActiveRun?.run_id, activeStep, nodes]);
 
   const currentNode = selectedNode || nodes[0] || null;
 

@@ -128,4 +128,8 @@ The frontend polls the backend for live run status, node logs, approvals, fleet 
 - If the frontend shows no live data, confirm the backend is running on port `8000`.
 - If research steps fail early, check that Ollama is running and reachable.
 - If verification fails with a Groq error, switch `VERIFIER_PROVIDER` back to `ollama` or provide a valid `GROQ_API_KEY`.
+<<<<<<< HEAD
 - If briefing delivery fails, confirm the Gmail credentials are set correctly.
+=======
+- If briefing delivery fails, confirm the Gmail credentials are set correctly.
+>>>>>>> 829ab37 (update the project files)

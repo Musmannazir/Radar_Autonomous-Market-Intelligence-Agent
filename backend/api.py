@@ -159,6 +159,9 @@ def _run_graph(run_id: str, topic: str):
                     active_runs[run_id].setdefault("events", []).append(
                         {"step": node_name, "status": "completed", "timestamp": datetime.utcnow().isoformat()}
                     )
+                if node_name in AGENT_FLEET_METRICS:
+                    AGENT_FLEET_METRICS[node_name]["success_count"] += 1
+                    AGENT_FLEET_METRICS[node_name]["last_execution"] = datetime.utcnow().isoformat()
 
         state_snapshot = app_graph.get_state(config)
         with runs_lock:
@@ -370,7 +373,16 @@ def dashboard_metrics():
     if not agent_statuses:
         agent_statuses = []
 
+    current_run_events = get_run_events(latest_active["run_id"]) if latest_active else []
+
+    # Derive the active step from run events, which log "running" the moment a
+    # node STARTS (stream_mode="updates" only fires on node completion, so it
+    # lags a whole node behind during slow steps like the verifier).
     active_step = latest_active.get("current_step") if latest_active else None
+    for ev in reversed(current_run_events):
+        if ev.get("status") == "running":
+            active_step = ev.get("step")
+            break
     active_index = PIPELINE_ORDER.index(active_step) if active_step in PIPELINE_ORDER else -1
 
     for index, role in enumerate(AGENT_FLEET_TEMPLATE):
