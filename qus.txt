@@ -1,0 +1,561 @@
+==============================================================
+ RADAR — 50 VIVA QUESTIONS & ANSWERS (ROMAN URDU)
+==============================================================
+Yeh 50 questions/sawal aur unke detailed jawab hain. Har jawab
+itna detailed hai ke aap viva mein bina atkey bol saken.
+Backend pe focus hai (frontend basic bhi included hai).
+
+
+==============================================================
+ FLOW DIAGRAM — RADAR KA POORA KAAM (NON-TECHNICAL FRIENDLY)
+==============================================================
+
+Non-technical bandon ke liye simple diagram — yeh yaad rakho ke
+sawal aane pe drawing kar sako ya bol sako:
+
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 1: AAP TOPIC DETE HO (WATCHLIST)                  │
+    │                                                         │
+    │  Jaise: "AI startups funding 2024"                      │
+    │  Aap sirf topic likho, baqi sab Radar khud karega.      │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 2: PLANNER — SAWAL BANATA HAI                     │
+    │                                                         │
+    │  AI sochta hai: "Yeh topic samajhne ke liye kya kya     │
+    │  dhundna hai?"                                          │
+    │                                                         │
+    │  Output: 3-5 chhote sawal jaise:                        │
+    │   • "Kaun si AI companies ne funding li 2024 mein?"     │
+    │   • "Kitni funding mili overall?"                       │
+    │   • "Kaun se investors ne invest kiya?"                 │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 3: RESEARCHERS — WEB SE FACTS DHOONDTHE HAI       │
+    │                                                         │
+    │  HAR SAWAL KE LIYE ALAG RESEARCHER CHALTA HAI           │
+    │  (5 sawal = 5 researchers EK SAATH parallel)            │
+    │                                                         │
+    │  Kya karte hain:                                        │
+    │   1. Google/Google jaisi search (DuckDuckGo FREE)       │
+    │   2. Top 3 websites ka content padhte hain              │
+    │   3. Usme se facts nikaalte hain (source URL ke saath)  │
+    │                                                         │
+    │  Example: "XYZ company ne $50M Series A raise kiya"     │
+    │  Source: https://techcrunch.com/xyz-deal                │
+    │                                                         │
+    │  NOTE: URLs code se attach hoti hain, AI se nahi!       │
+    │  (AI kabhi galat URL bana deta hai — hallucination)     │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 4: VERIFIER — FACTS CHECK KARTA HAI               │
+    │                                                         │
+    │  YEH SAB SE ZAROORI STEP HAI — "HALLUCINATION GUARD"    │
+    │                                                         │
+    │  Kya karta hai:                                         │
+    │   1. Har claim ki source website DOBARA padhta hai      │
+    │   2. Check karta hai: "Yeh source ye claim support      │
+    │      karta hai ya nahi?"                                │
+    │   3. Agar support kare to CONFIRMED                     │
+    │   4. Agar nahi kare to REJECTED (briefing mein nahi)    │
+    │   5. Agar pakka na ho to FLAGGED (uncertain section)    │
+    │                                                         │
+    │  Example:                                               │
+    │   Claim: "XYZ raised $50M"                              │
+    │   Source: TechCrunch article mein likha hai ✓           │
+    │   Verdict: CONFIRMED (confidence: 0.9)                  │
+    │                                                         │
+    │   Claim: "ABC company acquired DEF"                     │
+    │   Source: Kahi nahi likha ✗                             │
+    │   Verdict: REJECTED (briefing mein nahi aayega)         │
+    │                                                         │
+    │  PARALLEL: 4 sources ek saath check hoti hain           │
+    │  (ThreadPoolExecutor — speed up)                        │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 5: DEDUP — PURANI NEWS HATAO                      │
+    │                                                         │
+    │  Agar aapne kal wali briefing mein bhi "XYZ raised $50M" │
+    │  padha tha, to RADAR KHALI WOHI purana claim nahi       │
+    │  dega. Yeh sirf NAYA signal deta hai.                   │
+    │                                                         │
+    │  Kaise kaam karta hai:                                  │
+    │   • Har claim ka mathematical fingerprint (embedding)   │
+    │   • Purane claims se compare karo                        │
+    │   • Agar 75%+ similar hai to = DUPLICATE                │
+    │   • Sirf 100% naye claims bache = "New Findings"        │
+    │                                                         │
+    │  Tool: ChromaDB (vector database — semantic memory)     │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 6: WRITER — REPORT LIKHTA HAI                     │
+    │                                                         │
+    │  AI saare naye findings ko chhoti si report mein likhta  │
+    │  hai:                                                   │
+    │                                                         │
+    │   ┌───────────────────────────────────────────────┐     │
+    │   │  CONFIRMED FACTS (yakeen se)                   │     │
+    │   │  • XYZ ne $50M raise kiya (confidence: 0.9)   │     │
+    │   │    Why it matters: market mein bada shift      │     │
+    │   │    Source: techcrunch.com/xyz                  │     │
+    │   └───────────────────────────────────────────────┘     │
+    │                                                         │
+    │   ┌───────────────────────────────────────────────┐     │
+    │   │  UNCONFIRMED / NEEDS REVIEW (shak hai)        │     │
+    │   │  • PQR company IPO plan kar rahi hai (0.6)     │     │
+    │   │    Why it matters: agar ho jaye to bada event  │     │
+    │   │    Source: bloomberg.com/pqr                   │     │
+    │   └───────────────────────────────────────────────┘     │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 7: APPROVAL — AAP KI MANZURI                      │
+    │                                                         │
+    │  Report aap ko dikhai jaati hai (frontend ya CLI mein).  │
+    │  Aap 3 cheezein kar sakte ho:                           │
+    │                                                         │
+    │    ✅ APPROVE  — report bhej do as-is                    │
+    │    ✏️  EDIT     — kuch badal do phir bhej do              │
+    │    ❌ REJECT   — report mat bhejo                        │
+    │                                                         │
+    │  BINA AAPKI MANZURI KE KUCH BHI EMAIL NAHI BHEJTA.      │
+    │  (Human-in-the-loop — yeh safety feature hai)           │
+    └─────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │  STEP 8: EMAIL — BRIEFING AAP KO MILTA HAI              │
+    │                                                         │
+    │  Aapki email pe report aa jati hai.                     │
+    │  Next time Radar chalega to yeh bhi yaad rakhega ke     │
+    │  kya kya pehle bhej chuka hai — sirf naya report        │
+    │  dega.                                                  │
+    │                                                         │
+    │  Done! Aap ko bina kuch kiye latest news mil gayi.      │
+    └─────────────────────────────────────────────────────────┘
+
+
+    ╔═════════════════════════════════════════════════════════╗
+    ║  YEH POORA PROCESS ROZ SUBAH AAPKE BINA HOKE CHALTA HAI ║
+    ║  (Scheduler 8 baje auto-start karta hai)                 ║
+    ║                                                          ║
+    ║  Sirf approval step pe aap ka chahiye — baqi RADAR       ║
+    ║  KHUD SAB KARTA HAI (autonomous = khud chalne wala)     ║
+    ╚═════════════════════════════════════════════════════════╝
+
+
+    ── KEY NUMBERS TO REMEMBER (VIVA KE LIYE) ──
+
+    Topics added:     1 (watchlist item)
+    Questions made:   3-5 (by planner)
+    Sources checked:  3 per question
+    Researchers:      3-5 parallel (1 per question)
+    Verification:     4 sources parallel
+    Dedup threshold:  75% similarity = duplicate
+    Confidence cut:   50% = below rejected
+    Total LLM calls:  max 25 per run
+    Total search:     max 20 per run
+    Total cost:       $0 (free DuckDuckGo + local Ollama)
+    Email:            Gmail SMTP (app password)
+    Crash recovery:   Auto-resume from checkpoint
+
+
+==============================================================
+ PART A — PROJECT INTRODUCTION (1-6)
+==============================================================
+
+Q1. Apna project kya hai? 2 line mein batao.
+A. Radar ek autonomous market intelligence agent hai. Matlab yeh
+khud se research karta hai, web se news/facts dhundhta hai, verify
+karta hai, aur sirf nayi cheezon ki briefing email karta hai.
+Aap sirf ek topic (watchlist) dete ho, baqi sab khud hota hai.
+
+Q2. Iska real-world use case kya hai?
+A. Man lijiye aap kisi AI startup company mein kaam karte ho aur
+roz pata karna hota hai ke aapke competitors kya kar rahe hain.
+Aap Radar ko ek baar topic de do (e.g. "AI funding rounds") aur yeh
+roz subah search karke sirf nayi deals ki briefing email kar dega.
+Same cheez sports transfers, crypto, local tech jobs ke liye use ho
+sakti hai.
+
+Q3. Project ki tech stack kya hai?
+A. Backend: Python + FastAPI + LangGraph + SQLite + ChromaDB.
+LLM: Ollama (local) ya Groq (free API). Search: DuckDuckGo (free)
+ya Tavily. Frontend: React + Vite + TypeScript. Email: Gmail SMTP.
+
+Q4. Isme agents kitne hain aur kya karte hain?
+A. 6 agents hain: Planner (questions banata hai), Researcher (web
+se facts nikalta hai), Verifier (facts check karta hai), Dedup
+(duplicates hatata hai), Writer (briefing likhta hai), Deliverer
+(approval ke baad email karta hai).
+
+Q5. Multi-agent system kya hota hai?
+A. Multi-agent system mein ek bara kaam chhote chhote agents mein
+tod diya jata hai. Har agent apna specialization rakhta hai. Jaise
+ek agent sirf search karta hai, doosra sirf verify. Isse kaam fast,
+organized aur reliable hota hai — ek agent fail ho to baqi kaam
+karte rehte hain.
+
+Q6. LangGraph kya hai aur kyun use kiya?
+A. LangGraph ek library hai jo agents ko graph (flow diagram) ke
+roop mein organize karti hai. Har step ek node hota hai, aur edges
+batati hain ke flow kis taraf jayega. Main isko isliye use karta
+hoon kyunki yeh state management, parallel execution (Send API),
+checkpointing (crash recovery) aur human-in-the-loop built-in deta
+hai — jo is project ki main requirements hain.
+
+==============================================================
+ PART B — ARCHITECTURE & GRAPH (7-16)
+==============================================================
+
+Q7. Graph kya hai? Aapke project ka graph kahan hai?
+A. Graph ek state machine hai jo agents ka flow define karta hai.
+Mera project ka graph 2 files mein hai: graph/supervisor.py (jahan
+supervisor aur graph compile hota hai) aur graph/subgraphs.py
+(jahan har agent ek subgraph hai).
+
+Q8. Aapke project mein subgraph kahan hain?
+A. graph/subgraphs.py mein. Har agent (planner, researcher, verifier,
+dedup, writer, deliverer) ek chhota compiled StateGraph hai. Inn
+subgraphs ko parent graph (supervisor) ke nodes ki tarah add kiya
+jata hai.
+
+Q9. Supervisor kya karta hai?
+A. Supervisor har step ke baad state (AgentState) ko check karta hai
+aur decide karta hai ke agla kaun sa subgraph chalana hai. Jaise:
+agar sub_questions empty hain to "planner" bhejta hai, agar raw
+findings hain lekin verify nahi hue to "verifier" bhejta hai. Yeh
+rule-based supervisor hai jo deterministic flow control karta hai.
+
+Q10. Send API kya hai? Parallel researchers kaise chalte hain?
+A. LangGraph ka Send function ek node ko multiple instances mein
+parallel chala sakta hai. Planner 3-5 questions banata hai. Uske
+baad route_to_researchers() har question ke liye ek Send("researcher",
+{question}) bhejta hai. Matlab 5 researchers ek saath chalte hain
+agar 5 questions hain — isse speed 5x ho jati hai.
+
+Q11. Checkpointing kaise hota hai? Crash ke baad kya hota hai?
+A. LangGraph ka SqliteSaver har node ke baad state ko
+checkpoints.sqlite mein save karta hai. Agar server crash ho jaye
+to aap graph ko same thread_id se dobara invoke karte ho — yeh
+last saved checkpoint se resume hota hai, poora kaam dobara nahi
+karta. Yehi "durable" requirement poori karta hai.
+
+Q12. AgentState kya hai?
+A. AgentState ek TypedDict hai jo poori pipeline ke data ko carry
+karta hai. Isme hain: run_id, watchlist_item, sub_questions,
+raw_findings, verified_findings, new_findings, briefing_draft,
+approval_status, errors. raw_findings aur errors ka operator.add
+reducer hai — matlab parallel researchers ke results sab accumulate
+hote hain, overwrite nahi hote.
+
+Q13. Aapke graph ka flow kya hai?
+A. Flow yeh hai:
+SUPERVISOR -> PLANNER -> SUPERVISOR -> RESEARCHERS (parallel)
+-> SUPERVISOR -> VERIFIER -> SUPERVISOR -> DEDUP -> SUPERVISOR
+-> WRITER -> SUPERVISOR -> DELIVERER -> END.
+Har subgraph ke baad control supervisor ke paas wapas jata hai jo
+next step decide karta hai.
+
+Q14. Human-in-the-loop kaise implement kiya?
+A. LangGraph ka interrupt() function graph ko pause kar deta hai.
+Deliverer node interrupt() call karta hai aur briefing draft wapis
+deti hai. User approve/edit/reject karta hai. Approve karne pe
+Command(resume={"action": "approve"}) bheja jata hai aur graph
+wahin se resume hota hai. Yeh email ko guard karta hai.
+
+Q15. Rejected/skipped statuses kaise handle hote hain?
+A. Agar user reject kare to approval_status="rejected" set hota hai
+aur run khatam. Agar koi nayi finding na ho to deliverer
+approval_status="skipped_no_news" set karta hai bina email bheje.
+Email fail hone pe "send_failed" status.
+
+Q16. Ek run ki zindagi kya hai? Statuses kya hain?
+A. Run statuses: queued -> running -> (awaiting_approval | failed |
+skipped_no_news) -> approved/rejected. api.py mein runs SQLite mein
+save hote hain aur active_runs dictionary mein live track hote hain.
+
+==============================================================
+ PART C — AGENTS DETAIL (17-26)
+==============================================================
+
+Q17. Planner agent kaise kaam karta hai?
+A. planner.py mein plan_research(topic) function hai. Yeh Ollama
+llama3.2:3b model ko prompt bhejta hai ke topic ko 3-5 searchable
+research questions mein todo. Model JSON array return karta hai.
+Temperature 0 use hota hai taake deterministic output aaye. Parse
+fail ho to empty list return hoti hai.
+
+Q18. Researcher agent kaise kaam karta hai?
+A. researcher.py mein research_question(question) function hai.
+Yeh search_web() se top 3 results lati hai, 100 chars se chhoti
+content skip karti hai, phir LLM se claims extract karti hai.
+Sabse important: source_url programmatically attach hoti hai —
+LLM kabhi URL generate nahi karta, yeh search result object se
+code mein aati hai. Isse URL hallucination khatam hua.
+
+Q19. Researcher source URL kyun attach karta hai? LLM kyun nahi?
+A. Kyunki LLM URLs "invent" karta hai (hallucination) — jaise
+"https://www.example.com" return kar deta hai. Yehi sab se bada
+bug tha. Ab URL code mein search result se milti hai, jo real aur
+working hoti hai. Yeh "sourced" requirement ka core hai.
+
+Q20. Verifier agent kya karta hai?
+A. Verifier anti-hallucination layer hai. Yeh har claim ko source
+se check karta hai. Kaam: claims ko source URL se group karta hai,
+source page padhta hai, batch mein LLM se verdict leta hai
+(confirmed/flagged/rejected/error), confidence 0-1 leta hai, aur
+sirf confirmed/flagged + confidence >= 0.5 wale pass karta hai.
+
+Q21. Verifier parallel kaise hai?
+A. ThreadPoolExecutor se 4 sources ek saath verify hote hain.
+Pehle sequential tha (ek source, phir agla) jo 3-5 minute leta tha.
+Ab parallel hone se ~1 minute mein ho jata hai. Yeh main performance
+fix tha.
+
+Q22. Fail-closed kya hota hai?
+A. Fail-closed matlab: agar koi cheez verify nahi ho saki to use
+pass mat karo. Verifier mein agar LLM call error de (jaise rate
+limit) to verdict="error" hota hai jo hamesha exclude hota hai.
+Agar usko "flagged" treat karte to unverified claim briefing mein
+chala jata — galat hota. Isliye errors fail-closed hain.
+
+Q23. Dedup (Memory) kaise kaam karta hai?
+A. tools/vector_store.py ChromaDB use karta hai. Har claim ka
+embedding banata hai aur cosine similarity se check karta hai ke
+kya yeh claim pehle kabhi aaya tha. Similarity >= 0.75 ho to
+duplicate hai, skip hota hai. Sirf genuinely naye claims briefing
+mein aate hain. Yehi "new-only" requirement hai.
+
+Q24. Writer agent briefing kaise likhta hai?
+A. Writer findings ko 2 groups mein todta hai: high confidence
+(>= 0.7) "Confirmed Facts" section mein aur low confidence
+(0.5-0.69) "Unconfirmed / Needs Review" section mein. Har claim ke
+saath "why it matters" note aur source URL hota hai. Yehi
+"honest reporting" hai — uncertain claims asserted nahi kiye jate.
+
+Q25. Deliverer agent kya karta hai?
+A. Deliverer approval ka guard hai. Yeh interrupt() se rukta hai,
+briefing draft dikhata hai. User approve/edit/reject karta hai.
+Approve hone pe send_briefing_email() Gmail SMTP se email bhejta
+hai. Log bhi karta hai taake agla run jaane ke pehle se pata ho.
+
+Q26. Email kaise bhejta hai?
+A. agents/deliverer.py mein smtplib.SMTP_SSL("smtp.gmail.com", 465)
+use hota hai. Gmail app password se login hota hai (real password
+nahi). MIMEText se body banati hai. Default recipient GMAIL_ADDRESS
+hai (khud ko email). Yeh pure Python hai — koi email library SDK
+nahi chahiye.
+
+==============================================================
+ PART D — DATABASE & MEMORY (27-33)
+==============================================================
+
+Q27. Database structure kya hai? Kitni tables hain?
+A. 4 tables hain (db/schema.sql mein):
+1) watchlist — id, topic, active (topics jo track karte ho)
+2) runs — id, item_id, status, started_at, completed_at
+3) findings — run_id, claim, source_url, confidence, is_new
+4) briefings — run_id, content, sent_at
+Database file: db/radar.sqlite.
+
+Q28. SQLite kyun? PostgreSQL kyun nahi?
+A. SQLite zero-config hai — koi server install nahi karna padta,
+sirf ek file hai. Is project ki scale pe (roz ke kuch runs, 100s
+findings) yeh kaafi hai aur free hai. PostgreSQL is use-case ke
+liye over-engineering hota.
+
+Q29. ChromaDB kya hai? Vector store kyun chahiye?
+A. ChromaDB ek local vector database hai jo embeddings store karta
+hai. Vector store isliye chahiye kyunki "duplicate" ka matlab
+similar meaning hai, exact match nahi. Do alag words se ek hi baat
+batai ja sakti hai (e.g. "AI company raised $10M" vs "startup got
+10 million funding"). Embeddings + cosine similarity dono ko same
+cheez samajhte hain.
+
+Q30. Cosine similarity kya hai? Threshold kyun 0.75?
+A. Cosine similarity do vectors ke beech angle ka cosine hai —
+0 (bilkul alag) se 1 (bilkul same). Hum 0.75 threshold use karte
+hain kyunki humne test kiya ke same-claim ke reworded versions
+~0.788 similarity dete hain. 0.75 se upar = duplicate.
+
+Q31. ChromaDB distance metric ki kya problem thi?
+A. Chroma default mein squared L2 distance use karta hai, cosine
+nahi. Humne 1 - distance se similarity nikal rahe the jo squared L2
+pe galat thi — unrelated claims ko similarity 1.000 mil raha tha.
+Fix: collection ko metadata={"hnsw:space": "cosine"} se banaya.
+
+Q32. Checkpoints database kya hota hai?
+A. db/checkpoints.sqlite mein LangGraph apni state save karta hai
+har step ke baad. Isi se crash recovery hota hai. Pehle wahan 122
+checkpoints aur 531 writes the — matlab pipeline boht baar chal chuki.
+
+Q33. Data persistance kahan kahan hai?
+A. 3 jagah:
+1) radar.sqlite — app ka structured data (watchlists, runs, findings)
+2) checkpoints.sqlite — LangGraph ka state
+3) chroma/ — vector embeddings (semantic memory)
+Yeh teeno local hain — koi cloud storage nahi.
+
+==============================================================
+ PART E — SEARCH & READING (34-38)
+==============================================================
+
+Q34. Search kaise hota hai? DuckDuckGo kyun?
+A. tools/search.py mein search_web() function hai. Pehle DuckDuckGo
+(ddgs library) try karta hai — yeh FREE hai, koi API key nahi
+chahiye. Agar DDG fail/empty ho to Tavily try karta hai (agar key
+configured hai). Kabhi raise nahi karta — fail ho to empty list.
+
+Q35. DuckDuckGo aur Tavily mein farq?
+A. DuckDuckGo free hai, keyless, lekin sirf title + snippet deta
+hai (content kam). Tavily API key chahiye lekin page ka extracted
+content deta hai (better). Hum DDG primary rakhte hain kyunki
+project "everything free" hai, Tavily optional upgrade hai.
+
+Q36. Page reader kya karta hai?
+A. tools/reader.py ka fetch_page() URL ka content nikalta hai.
+requests se page fetch karta hai, phir trafilatura.extract() se
+main content nikalta hai. Agar wo fail ho to BeautifulSoup ka
+stripped_strings use karta hai (5000 chars cap). 100 chars se kam
+content = failure. Kabhi raise nahi karta — hamesha dict return.
+
+Q37. Dead links / paywalls / junk pages kaise handle hote hain?
+A. Yeh robustness ka hissa hai:
+- Dead link: fetch fail hota hai -> success=False -> claim reject
+  ("Source unreachable")
+- Paywall: content kam milta hai -> < 100 chars -> skip
+- Junk page: relevant claims nahi milte -> empty findings
+- HTTP errors: reader kabhi raise nahi karta, dict return karta hai
+In sab cases pipeline crash nahi hoti — graceful degrade hota hai.
+
+Q38. Rate limit / network error pe backoff kaise hota hai?
+A. search_web() par tenacity decorator hai: 3 attempts, exponential
+backoff 2-10 seconds. Matlab pehli fail pe 2 sec wait, phir 4 sec,
+phir 8 sec. Verifier mein bhi agar batch fail ho to per-claim retry
+fallback hota hai. Isse flaky internet/rate limits pe graceful.
+
+==============================================================
+ PART F — ANTI-HALLUCINATION & TRUST (39-43)
+==============================================================
+
+Q39. Hallucination rokne ke liye 3 layers kya hain?
+A. 1) Source URL programmatically attach hoti hai (LLM se nahi).
+2) Independent Verifier source dobara padh ke claim check karta hai
+— researcher ki output pe blind trust nahi.
+3) Confidence threshold MIN_CONFIDENCE=0.5 — low confidence claims
+reject/flag hote hain, assert nahi.
+
+Q40. Verifier LLM ki output ko reject kaise kar sakta hai?
+A. Verifier ek alag agent hai jo apne aap source page padhta hai.
+Agar source text claim ko support nahi karta to verdict="rejected"
+deti hai. Matlab researcher ne jo nikala, verifier use reverse kar
+sakta hai. Yeh "independent check" architecture ka point hai.
+
+Q41. Confidence score kya hota hai? Kahan use hota hai?
+A. Confidence 0-1 ka number hai jo model deta hai ke kitna certain
+hai claim source se supported hai. MIN_CONFIDENCE=0.5 se neeche wale
+reject. Writer mein >= 0.7 "Confirmed" section mein, 0.5-0.69
+"Unconfirmed/Needs Review" section mein jate hain.
+
+Q42. "Never state a fact without source" kaise enforce hota hai?
+A. Har finding mein source_url mandatory hai. Researcher URL code se
+attach karta hai. Verifier usi source ko re-read karta hai. Agar
+URL dead ho to claim reject. Writer har claim ke saath source URL
+likhta hai. Koi claim bina URL ke briefing mein nahi aa sakta.
+
+Q43. Eval set kya hai? Evaluation kaise hoti hai?
+A. eval/eval_set.json mein 8 ground-truth claims hain with expected
+verdicts (confirmed/rejected/flagged). eval/evaluator.py latest
+findings ko in se compare karta hai aur compute karta hai: factual
+accuracy (% correctly verified), new-signal precision (% genuinely
+new), false positive rate. GET /dashboard/evaluations pe report.
+
+==============================================================
+ PART G — COST CONTROL & PERFORMANCE (44-46)
+==============================================================
+
+Q44. Cost control kaise hota hai?
+A. config.py mein 2 caps: MAX_LLM_CALLS_PER_RUN=25 aur
+MAX_SEARCH_CALLS_PER_RUN=20. Verifier findings ko MAX_LLM*3 pe cap
+karta hai. Har node record_cost() se apne LLM/search calls count
+karta hai. Isse per-run budget bounded rehta hai — daily unattended
+run mehenga nahi hota.
+
+Q45. Performance optimizations kya kiya?
+A. 1) Researchers parallel via Send API (5x speed).
+2) Verifier parallel via ThreadPoolExecutor (4 workers).
+3) Double-fetch khatam — researcher ka content source_content
+field mein forward hota hai, verifier dobara fetch nahi karta.
+4) Robust JSON parsing se fallback retries kam hui.
+
+Q46. Per run kitna cost aata hai?
+A. ~5 questions x 3 results = 15 researcher LLM calls + ~15 verifier
+batch calls + 1 writer = ~31 LLM calls max. DuckDuckGo FREE hai.
+Ollama local se cost $0. Groq free tier mein bhi aa sakta hai.
+Total: bina key ke bilkul free, Groq se bhi free (limited).
+
+==============================================================
+ PART H — FRONTEND (BASIC, 47-49)
+==============================================================
+
+Q47. Frontend kya hai? Backend se kaise jorta hai?
+A. Frontend React + Vite + TypeScript ka dashboard hai. Yeh
+frontend/src/api/radarApi.ts se FastAPI endpoints ko call karta hai.
+Dashboard pe aap watchlists add kar sakte ho, runs start karte ho,
+approval dete ho, evaluation metrics dekhte ho. Frontend polling
+karta hai — har kuch seconds backend se nayi status le leta hai.
+
+Q48. Dashboard pe kya kya dikhta hai?
+A. Live run status (kaun sa agent chal raha hai), agent fleet
+(har agent ka status), watchlists, runs history, pending approvals
+(briefing approve/edit/reject), evaluations (accuracy/precision),
+aur settings. Yeh sab backend ke /dashboard/* endpoints se aata hai.
+
+Q49. CORS kya hai? Frontend-Backend connection mein kyun?
+A. CORS (Cross-Origin Resource Sharing) browser ko allow karta hai
+ke ek port ka app doosre port ke API ko call kare. Frontend port
+3000 pe hai, backend port 8000 pe. FastAPI mein CORSMiddleware
+allow_origins=["*"] hai — development ke liye sab allow hai.
+
+==============================================================
+ PART I — FAILURES & REFLECTION (50)
+==============================================================
+
+Q50. Sab se mushkil bug kya tha aur kaise fix kiya?
+A. Sab se dangerous bug tha: Groq ka rate-limit error aata to
+verifier usko "flagged" mark kar deta tha — matlab jo claim verify
+NAHI hua wo briefing mein pass ho jata. Yeh anti-hallucination
+guarantee tod raha tha. Fix: distinct "error" verdict introduce
+kiya jo hamesha fail-closed (reject) hota hai. Saath mein claims
+per-source batch kiye (ek LLM call mein kai claims) jo calls 4-5x
+kam kar deta hai, rate limit pehle aata hi kam hai.
+
+==============================================================
+ EXTRA TIPS FOR VIVA
+==============================================================
+1. "Kyun" questions pe focus — examiner jaanta hai "kya" kiya,
+   wo poochta hai "kyun" aur "kaise socha".
+2. Failures batao honesty se — "3 hardest failures" wali story
+   interviewer ko sab se zyada impress karti hai.
+3. Agar frontend ka na pata ho to bolo: "Frontend React ka
+   dashboard hai jo backend API se data leta hai" — itna kaafi hai.
+4. Numbers yaad rakho: threshold 0.75, MIN_CONFIDENCE 0.5,
+   MAX_LLM 25, 4 tables, 6 agents, 8 eval items.
+5. Har answer mein "kyunki safety/reliability ke liye" add karo —
+   yeh engineering thinking dikhata hai.
+
+==============================================================
+ END — 50 QUESTIONS COMPLETE
+==============================================================

@@ -21,6 +21,8 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
   const [status, setStatus] = useState<ApprovalStatus>('pending');
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editContent, setEditContent] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const pollForResume = (runId: string, attempt = 0) => {
@@ -76,6 +78,20 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
     } catch (err: any) {
       setStatus('error');
       setErrorMsg(err?.message || 'Failed to submit rejection to the backend.');
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!pendingApproval || !editContent.trim()) return;
+    setIsEditModalOpen(false);
+    setStatus('processing');
+    setErrorMsg(null);
+    try {
+      await radarApi.submitApproval(pendingApproval.runId, 'edit', editContent);
+      pollForResume(pendingApproval.runId);
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMsg(err?.message || 'Failed to submit edited briefing to the backend.');
     }
   };
 
@@ -182,6 +198,13 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
 
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={() => { setEditContent(pendingApproval?.briefingDraft || ''); setIsEditModalOpen(true); }}
+            disabled={status === 'processing'}
+            className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-amber-500/20 text-white hover:text-amber-400 border border-white/10 text-xs font-semibold transition-colors disabled:opacity-40"
+          >
+            Edit
+          </button>
+          <button
             onClick={() => setIsRejectModalOpen(true)}
             disabled={status === 'processing'}
             className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/20 text-white hover:text-red-400 border border-white/10 text-xs font-semibold transition-colors disabled:opacity-40"
@@ -262,6 +285,55 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
                   className="px-4 py-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium hover:bg-amber-500/30 transition-colors"
                 >
                   Send Feedback
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative">
+            <button
+              onClick={() => setIsEditModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+
+            <h3 className="text-lg font-bold text-white mb-1">Edit Briefing</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Modify the briefing below. Your edited version will be sent instead of the original.
+            </p>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1.5">
+                  Briefing Content
+                </label>
+                <textarea
+                  rows={12}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none font-mono text-xs leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEdit}
+                  disabled={!editContent.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium hover:bg-amber-500/30 transition-colors disabled:opacity-40"
+                >
+                  Save Edits & Send
                 </button>
               </div>
             </div>
