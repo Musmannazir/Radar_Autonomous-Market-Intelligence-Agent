@@ -22,6 +22,7 @@ from tools.db import (
     get_run_rows,
     list_findings,
     ensure_schema,
+    get_connection,
 )
 from tools.run_events import get_run_events
 
@@ -507,6 +508,47 @@ def dashboard_settings():
             "runs": counts["runs"],
             "briefings": counts["briefings"],
         }
+    }
+
+
+@app.get("/approvals/history")
+def get_approval_history(limit: int = 50):
+    """Get history of approved/rejected runs with their briefings."""
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT
+            r.id as run_id,
+            r.status,
+            r.started_at,
+            r.completed_at,
+            w.topic as watchlist_topic,
+            b.content as briefing_content,
+            b.sent_at
+        FROM runs r
+        LEFT JOIN watchlist w ON w.id = r.item_id
+        LEFT JOIN briefings b ON b.run_id = r.id
+        WHERE r.status IN ('approved', 'rejected')
+        ORDER BY COALESCE(r.completed_at, r.started_at) DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    conn.close()
+
+    return {
+        "history": [
+            {
+                "run_id": row["run_id"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "topic": row["watchlist_topic"],
+                "briefing_content": row["briefing_content"],
+                "sent_at": row["sent_at"],
+            }
+            for row in rows
+        ]
     }
 
 

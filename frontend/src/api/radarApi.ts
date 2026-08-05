@@ -64,6 +64,20 @@ export interface ApiRunRow {
   watchlist_active: number | null;
 }
 
+export interface ApprovalHistoryItem {
+  run_id: string;
+  status: 'approved' | 'rejected';
+  started_at: string | null;
+  completed_at: string | null;
+  topic: string | null;
+  briefing_content: string | null;
+  sent_at: string | null;
+}
+
+export interface ApprovalHistoryResponse {
+  history: ApprovalHistoryItem[];
+}
+
 export interface DashboardMetricsResponse {
   watchlists: ApiWatchlist[];
   runs: ApiRunRow[];
@@ -182,6 +196,11 @@ export const radarApi = {
 
   getPendingApprovals: async (): Promise<{ pending: PendingApprovalRecord[] }> => {
     const res = await fetch(`${API_BASE}/approvals/pending`);
+    return handleRes(res);
+  },
+
+  getApprovalHistory: async (limit = 50): Promise<ApprovalHistoryResponse> => {
+    const res = await fetch(`${API_BASE}/approvals/history?limit=${limit}`);
     return handleRes(res);
   },
 

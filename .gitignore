@@ -18,3 +18,6 @@ __pycache__/
 
 # Logs
 *.log
+
+#reports
+FINAL_PROJECT_REPORT_URDU/
