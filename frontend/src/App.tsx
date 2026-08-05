@@ -23,22 +23,48 @@ import { SettingsView } from './components/Views/SettingsView';
 import { ApprovalInterfaceView } from './components/Views/ApprovalInterfaceView';
 import { SignInView } from './components/Views/SignInView';
 
-function mapApiBriefingToUi(b: ApiBriefing): Briefing {
+function mapApiBriefingToUi(
+  b: ApiBriefing,
+  findings?: Array<{ id: number; run_id: string; claim: string; source_url: string; confidence: number | null; is_new: number | null }>,
+  topic?: string,
+  category?: Briefing['category'],
+): Briefing {
   const firstLine = (b.content.split('\n').find((l) => l.trim().length > 0) || 'Radar Briefing')
     .replace(/^\*+|\*+$/g, '')
     .slice(0, 100);
+
+  const findingsList = findings || [];
+  const avgConfidence = findingsList.length > 0
+    ? Math.round(
+        (findingsList.reduce((sum, f) => sum + (f.confidence || 0), 0) / findingsList.length) * 100,
+      )
+    : 0;
+  const uniqueSources = new Set(findingsList.map((f) => f.source_url));
+
   return {
     id: b.run_id,
-    title: firstLine,
-    category: 'INTELLIGENCE',
+    title: topic || firstLine,
+    category: category || 'AI_RESEARCH',
     timeAgo: b.sent_at ? 'Sent' : 'Draft',
-    confidence: 0,
-    sourcesCount: 0,
+    confidence: avgConfidence,
+    sourcesCount: uniqueSources.size,
     generatedDate: b.sent_at || '',
     executiveSummary: b.content,
-    keyFindings: [],
-    verifiedClaims: [],
-    citations: [],
+    keyFindings: findingsList.slice(0, 3).map((f) => ({
+      title: f.claim.slice(0, 80),
+      description: f.claim,
+    })),
+    verifiedClaims: findingsList.map((f) => ({
+      id: String(f.id),
+      claim: f.claim,
+      source: f.source_url,
+      confidence: Math.round((f.confidence || 0) * 100),
+      status: f.is_new ? ('VERIFIED' as const) : ('NEEDS REVIEW' as const),
+    })),
+    citations: findingsList.map((f) => ({
+      ref: `Ref #${f.id}`,
+      title: f.source_url,
+    })),
   };
 }
 
@@ -59,7 +85,7 @@ function toWatchlistTopic(item: ApiWatchlist, runs: ApiRunRow[]): WatchlistTopic
   return {
     id: String(item.id),
     name: item.topic,
-    category: (item.category as WatchlistTopic['category']) || 'TECHNOLOGY',
+    category: (item.category as WatchlistTopic['category']) || 'AI_RESEARCH',
     status: item.active ? 'Active / Pulse' : 'Paused',
     lastRun: formatRelativeTime(lastRun),
     findingsCount: 0,
@@ -262,7 +288,31 @@ export function App() {
         watchlistMap.set(item.id, toWatchlistTopic(item, runRows));
       });
       setWatchlists(Array.from(watchlistMap.values()));
-      setBriefings((metrics.briefings || []).map(mapApiBriefingToUi));
+
+      // Join findings and topic to each briefing for rich UI rendering
+      const findingsDataByRun = new Map<string, typeof metrics.findings>();
+      metrics.findings.forEach((finding) => {
+        const list = findingsDataByRun.get(finding.run_id) || [];
+        list.push(finding);
+        findingsDataByRun.set(finding.run_id, list);
+      });
+      const topicByRun = new Map<string, string>();
+      metrics.runs.forEach((run) => {
+        if (run.watchlist_topic) topicByRun.set(run.id, run.watchlist_topic);
+      });
+      // Map run_id → category via the watchlist item_id
+      const categoryByRun = new Map<string, Briefing['category']>();
+      const watchlistById = new Map<number, typeof metrics.watchlists[0]>();
+      metrics.watchlists.forEach((w) => watchlistById.set(w.id, w));
+      metrics.runs.forEach((run) => {
+        const wl = run.item_id != null ? watchlistById.get(run.item_id) : undefined;
+        if (wl?.category) categoryByRun.set(run.id, wl.category as Briefing['category']);
+      });
+      setBriefings(
+        (metrics.briefings || []).map((b) =>
+          mapApiBriefingToUi(b, findingsDataByRun.get(b.run_id), topicByRun.get(b.run_id), categoryByRun.get(b.run_id)),
+        ),
+      );
       setAgents(buildAgentFleet(metrics));
       setAgentStream(buildAgentStream(metrics));
       setEvaluations(
@@ -286,7 +336,7 @@ export function App() {
       .getBriefings(20)
       .then((data) => {
         if (data.briefings?.length) {
-          setBriefings(data.briefings.map(mapApiBriefingToUi));
+          setBriefings(data.briefings.map((b) => mapApiBriefingToUi(b)));
         }
       })
       .catch(() => {
@@ -331,15 +381,15 @@ export function App() {
   };
 
   // Handlers
-  const handleAddWatchlist = async (newTopic: WatchlistTopic) => {
-    await radarApi.createWatchlist({
-      name: newTopic.name,
-      category: newTopic.category,
-      frequency: newTopic.frequency,
-      priority: newTopic.priority,
-      description: newTopic.description,
-      icon: newTopic.icon,
-    });
+  const handleAddWatchlist = async (payload: {
+    name: string;
+    category: WatchlistTopic['category'];
+    frequency: WatchlistTopic['frequency'];
+    priority: WatchlistTopic['priority'];
+    description: string;
+    icon: string;
+  }) => {
+    await radarApi.createWatchlist(payload);
     await refreshDashboard();
   };
 

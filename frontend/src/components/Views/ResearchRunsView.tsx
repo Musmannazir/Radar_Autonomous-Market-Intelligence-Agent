@@ -24,13 +24,21 @@ interface NodeDetail {
 }
 
 export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ dashboard, onRunResearchModal }) => {
-  const [selectedNode, setSelectedNode] = useState<NodeDetail | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  const latestActiveRun = useMemo(() => {
+  // Most recent run (active or finished). The backend keeps finished runs in
+  // memory, so this stays populated after a run completes and its logs remain
+  // inspectable instead of all nodes going empty.
+  const latestRun = useMemo(() => {
     return [...(dashboard?.agent_statuses || [])]
-      .filter((entry) => ['running', 'queued', 'processing_approval', 'awaiting_approval'].includes(entry.status))
       .sort((a, b) => new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime())[0];
   }, [dashboard]);
+
+  const runId = latestRun?.run_id || 'idle';
+  const isRunActive = Boolean(
+    latestRun && ['running', 'queued', 'processing_approval', 'awaiting_approval'].includes(latestRun.status)
+  );
 
   const pipelineStages = [
     { id: 'planner', label: 'Planner', agent: 'Planner Agent', model: 'Ollama - llama3.2:3b' },
@@ -41,10 +49,20 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ dashboard, o
     { id: 'deliverer', label: 'Deliverer', agent: 'Deliverer Agent', model: 'Rule Engine' },
   ];
 
-  const activeStep = latestActiveRun?.current_step || null;
+  // Active step = last node that emitted a "running" event. This mirrors the
+  // backend's fleet status. `current_step` alone lags a whole node behind
+  // because it is only updated as nodes *finish*, not when they start.
+  const activeStep = useMemo(() => {
+    const events = dashboard?.current_run_events || [];
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].status === 'running') return events[i].step;
+    }
+    return latestRun?.current_step || null;
+  }, [dashboard, latestRun]);
+
   const currentRunEvents = dashboard?.current_run_events || [];
 
-  const nodes: NodeDetail[] = pipelineStages.map((stage, index) => {
+  const nodes: NodeDetail[] = pipelineStages.map((stage) => {
     const isCurrent = activeStep === stage.id;
     const isQueued = Boolean(activeStep) && pipelineStages.findIndex((stageItem) => stageItem.id === stage.id) > pipelineStages.findIndex((stageItem) => stageItem.id === activeStep);
     const stageLogs = currentRunEvents
@@ -57,29 +75,37 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ dashboard, o
       }));
 
     return {
-      id: `${latestActiveRun?.run_id || 'idle'}-${stage.id}`,
+      id: `${runId}-${stage.id}`,
       label: stage.label,
-      agent: latestActiveRun?.topic || 'No active run',
+      agent: latestRun?.topic || 'No run yet',
       status: isCurrent ? 'IN_PROGRESS' : isQueued ? 'QUEUED' : 'COMPLETED',
-      latency: latestActiveRun?.started_at ? 'live' : 'n/a',
+      latency: isRunActive ? 'live' : 'n/a',
       tokensUsed: dashboard ? String(dashboard.counts.findings) : '0',
       model: stage.model,
       outputSummary:
         stageLogs[stageLogs.length - 1]?.message ||
-        (isCurrent ? `Running ${stage.label.toLowerCase()} stage.` : `No logs yet for ${stage.label.toLowerCase()}.`),
+        (isCurrent
+          ? `Running ${stage.label.toLowerCase()} stage.`
+          : isQueued
+          ? `${stage.label} is queued — waiting for the ${activeStep} stage to finish.`
+          : `No logs yet for ${stage.label.toLowerCase()}.`),
       logs: stageLogs,
     };
   });
 
+  // Auto-select the currently running node only when a NEW run appears. Once the
+  // user clicks a node, their selection is preserved and is never overridden by
+  // subsequent dashboard polls.
   useEffect(() => {
-    if (!nodes.length) return;
+    if (selectedRunId === runId) return;
     const activeNode = nodes.find((node) => node.status === 'IN_PROGRESS') || nodes[0];
-    if (!selectedNode || selectedNode.id.startsWith(latestActiveRun?.run_id || '')) {
-      setSelectedNode(activeNode);
-    }
-  }, [latestActiveRun?.run_id, activeStep, nodes]);
+    if (!activeNode) return;
+    setSelectedNodeId(activeNode.id);
+    setSelectedRunId(runId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
 
-  const currentNode = selectedNode || nodes[0] || null;
+  const currentNode = nodes.find((node) => node.id === selectedNodeId) || nodes[0] || null;
 
   const renderStatusLabel = (status: NodeDetail['status']) => {
     if (status === 'IN_PROGRESS') return 'running';
@@ -170,13 +196,13 @@ export const ResearchRunsView: React.FC<ResearchRunsViewProps> = ({ dashboard, o
         {/* Graph Visual Pipeline Nodes */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3 relative py-2">
           {nodes.length ? nodes.map((n, idx) => {
-            const isSelected = selectedNode?.id === n.id;
+            const isSelected = selectedNodeId === n.id;
             const isCompleted = n.status === 'COMPLETED';
 
             return (
               <div
                 key={n.id}
-                onClick={() => setSelectedNode(n)}
+                onClick={() => setSelectedNodeId(n.id)}
                 className={`p-4 rounded-2xl border transition-all cursor-pointer relative group ${
                   isSelected
                     ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] scale-105 z-10'

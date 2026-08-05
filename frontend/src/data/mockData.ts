@@ -4,7 +4,7 @@ export const INITIAL_WATCHLISTS: WatchlistTopic[] = [
   {
     id: 'wl-1',
     name: 'AI Agent Frameworks',
-    category: 'TECHNOLOGY',
+    category: 'AI_RESEARCH',
     status: 'Active / Pulse',
     lastRun: '2 mins ago',
     findingsCount: 1420,
@@ -17,7 +17,7 @@ export const INITIAL_WATCHLISTS: WatchlistTopic[] = [
   {
     id: 'wl-2',
     name: 'Quantum Key Distribution',
-    category: 'SECURITY',
+    category: 'OPEN_SOURCE_LLMS',
     status: 'Active / Pulse',
     lastRun: '15 mins ago',
     findingsCount: 890,
@@ -30,7 +30,7 @@ export const INITIAL_WATCHLISTS: WatchlistTopic[] = [
   {
     id: 'wl-3',
     name: 'EU AI Act Compliance',
-    category: 'COMPLIANCE',
+    category: 'AI_JOBS',
     status: 'Paused',
     lastRun: '3 days ago',
     findingsCount: 450,
@@ -43,7 +43,7 @@ export const INITIAL_WATCHLISTS: WatchlistTopic[] = [
   {
     id: 'wl-4',
     name: 'Solid-State Battery IP',
-    category: 'R&D',
+    category: 'AI_INNOVATION',
     status: 'Active / Pulse',
     lastRun: '1 hour ago',
     findingsCount: 2310,
@@ -56,7 +56,7 @@ export const INITIAL_WATCHLISTS: WatchlistTopic[] = [
   {
     id: 'wl-5',
     name: 'Semiconductor Foundry Supply Chains',
-    category: 'MARKET',
+    category: 'OTHER',
     status: 'Active / Pulse',
     lastRun: '35 mins ago',
     findingsCount: 3840,
@@ -140,7 +140,7 @@ export const INITIAL_BRIEFINGS: Briefing[] = [
   {
     id: 'br-1',
     title: 'OpenAI Operator & Autonomous GUI Agent Infrastructure',
-    category: 'INTELLIGENCE',
+    category: 'AI_RESEARCH',
     timeAgo: '10 mins ago',
     confidence: 96,
     sourcesCount: 14,
@@ -197,7 +197,7 @@ export const INITIAL_BRIEFINGS: Briefing[] = [
   {
     id: 'br-2',
     title: 'Quarterly Semiconductor & AI Chip Supply Chain Resilience',
-    category: 'MARKET IMPACT',
+    category: 'OPEN_SOURCE_LLMS',
     timeAgo: '1 hour ago',
     confidence: 94,
     sourcesCount: 22,
@@ -229,7 +229,7 @@ export const INITIAL_BRIEFINGS: Briefing[] = [
   {
     id: 'br-3',
     title: 'Post-Quantum Encryption Standards Compliance Mandates',
-    category: 'POLICY',
+    category: 'OTHER',
     timeAgo: '3 hours ago',
     confidence: 98,
     sourcesCount: 18,

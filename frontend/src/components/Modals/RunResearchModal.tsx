@@ -108,7 +108,7 @@ export const RunResearchModal: React.FC<RunResearchModalProps> = ({
     const generated: Briefing = {
       id: runId,
       title: `Autonomous Research: ${currentTopic}`,
-      category: 'INTELLIGENCE',
+      category: 'AI_RESEARCH',
       timeAgo: 'Just now',
       confidence: 0,
       sourcesCount: 0,

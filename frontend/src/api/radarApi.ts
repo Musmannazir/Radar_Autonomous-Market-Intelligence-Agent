@@ -27,6 +27,22 @@ export interface ApiBriefing {
   sent_at: string | null;
 }
 
+export interface ApiBriefingDetail {
+  id: number;
+  run_id: string;
+  content: string;
+  sent_at: string | null;
+  topic: string;
+  findings: Array<{
+    id: number;
+    run_id: string;
+    claim: string;
+    source_url: string;
+    confidence: number | null;
+    is_new: number | null;
+  }>;
+}
+
 export interface ApiWatchlist {
   id: number;
   topic: string;
@@ -246,6 +262,20 @@ export const radarApi = {
 
   health: async (): Promise<{ status: string }> => {
     const res = await fetch(`${API_BASE}/health`);
+    return handleRes(res);
+  },
+
+  getBriefingDetail: async (runId: string): Promise<ApiBriefingDetail> => {
+    const res = await fetch(`${API_BASE}/briefings/${runId}`);
+    return handleRes(res);
+  },
+
+  queryBriefing: async (runId: string, question: string): Promise<{ answer: string }> => {
+    const res = await fetch(`${API_BASE}/briefings/${runId}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
     return handleRes(res);
   },
 };

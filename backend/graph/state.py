@@ -19,3 +19,4 @@ class AgentState(TypedDict):
     briefing_draft: str
     approval_status: str  # "pending" | "approved" | "edited" | "rejected"
     errors: Annotated[List[str], operator.add]
+    next: Optional[str]  # supervisor routing decision: planner, researcher, verifier, dedup, writer, deliverer

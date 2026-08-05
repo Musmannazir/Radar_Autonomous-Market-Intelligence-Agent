@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { WatchlistTopic } from '../../types';
 
 interface WatchlistViewProps {
   watchlists: WatchlistTopic[];
-  onAddWatchlist: (topic: WatchlistTopic) => void;
+  onAddWatchlist: (payload: {
+    name: string;
+    category: WatchlistTopic['category'];
+    frequency: WatchlistTopic['frequency'];
+    priority: WatchlistTopic['priority'];
+    description: string;
+    icon: string;
+  }) => void;
   onToggleStatus: (id: string) => void;
   onDeleteWatchlist: (id: string) => void;
   onRunResearchModal: (watchlist?: { watchlistItemId: number; topic: string }) => void;
 }
+
+// AI-related keywords for topic validation
+const AI_KEYWORDS = [
+  'ai', 'artificial intelligence', 'machine learning', 'ml', 'deep learning',
+  'llm', 'large language model', 'neural', 'gpt', 'claude', 'gemini', 'llama',
+  'transformer', 'generative', 'neural network', 'nlp', 'natural language',
+  'computer vision', 'cv', 'robotics', 'autonomous agent', 'ai agent',
+  'open source llm', 'ai jobs', 'ai research', 'ai innovation',
+  'mlops', 'mle', 'ml engineer', 'data science'
+];
+
+const isAIRelated = (topic: string): boolean => {
+  const lowerTopic = topic.toLowerCase();
+  return AI_KEYWORDS.some(keyword => lowerTopic.includes(keyword));
+};
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
   watchlists,
@@ -18,30 +40,36 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
-  const [newCategory, setNewCategory] = useState<WatchlistTopic['category']>('TECHNOLOGY');
+  const [newCategory, setNewCategory] = useState<WatchlistTopic['category']>('AI_RESEARCH');
   const [newFrequency, setNewFrequency] = useState<WatchlistTopic['frequency']>('Real-time (High Load)');
   const [newPriority, setNewPriority] = useState<WatchlistTopic['priority']>('HIGH');
   const [newDescription, setNewDescription] = useState('');
+  const [topicError, setTopicError] = useState<string | null>(null);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const categoryIcon = (cat: WatchlistTopic['category']) =>
+    cat === 'OPEN_SOURCE_LLMS' ? 'memory' : cat === 'AI_JOBS' ? 'work' : cat === 'AI_INNOVATION' ? 'lightbulb' : cat === 'OTHER' ? 'category' : 'psychology';
+
+  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!newTopicName.trim()) return;
 
-    const created: WatchlistTopic = {
-      id: `wl-${Date.now()}`,
+    // Validate that topic is AI-related
+    if (!isAIRelated(newTopicName)) {
+      setTopicError("Can't search - Out of Domain");
+      return;
+    }
+    setTopicError(null);
+
+    // Call the API to create the watchlist and let refreshDashboard handle the UI update
+    onAddWatchlist({
       name: newTopicName,
       category: newCategory,
-      status: 'Active / Pulse',
-      lastRun: 'Just now',
-      findingsCount: 0,
-      findingsNew: 0,
-      icon: newCategory === 'SECURITY' ? 'security' : newCategory === 'COMPLIANCE' ? 'gavel' : 'psychology',
       frequency: newFrequency,
       priority: newPriority,
-      description: newDescription || 'Continuous autonomous agent monitoring enabled.'
-    };
+      description: newDescription || 'Continuous autonomous agent monitoring enabled.',
+      icon: categoryIcon(newCategory),
+    });
 
-    onAddWatchlist(created);
     setNewTopicName('');
     setNewDescription('');
     setIsAddModalOpen(false);
@@ -95,7 +123,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={onRunResearchModal}
+              onClick={() => onRunResearchModal()}
               className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-white transition-colors flex items-center gap-1.5 font-medium"
             >
               <span className="material-symbols-outlined text-indigo-400 text-base">rocket_launch</span>
@@ -145,9 +173,15 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
                   {/* Category */}
                   <td className="px-6 py-4">
-                    <span className="px-2.5 py-1 rounded-full font-mono text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                      {wl.category}
-                    </span>
+                    {wl.category === 'OTHER' ? (
+                      <span className="px-2.5 py-1 rounded-full font-mono text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                        OUT OF DOMAIN
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full font-mono text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        {wl.category}
+                      </span>
+                    )}
                   </td>
 
                   {/* Status */}
@@ -235,13 +269,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             <p className="text-xs text-slate-400 mb-5">Configure autonomous agent monitoring parameters</p>
 
             <form onSubmit={handleCreate} className="space-y-4 text-xs">
+              {topicError && (
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[11px] px-3 py-2 rounded-xl">
+                  {topicError}
+                </div>
+              )}
               <div>
                 <label className="block text-slate-300 font-medium mb-1.5">Watchlist Topic Name</label>
                 <input
                   type="text"
                   required
                   value={newTopicName}
-                  onChange={(e) => setNewTopicName(e.target.value)}
+                  onChange={(e) => {
+                    setNewTopicName(e.target.value);
+                    if (topicError) setTopicError(null);
+                  }}
                   placeholder="e.g. Next-Gen Nuclear Small Modular Reactors"
                   className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
@@ -255,12 +297,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     onChange={(e) => setNewCategory(e.target.value as any)}
                     className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500"
                   >
-                    <option value="TECHNOLOGY">TECHNOLOGY</option>
-                    <option value="SECURITY">SECURITY</option>
-                    <option value="COMPLIANCE">COMPLIANCE</option>
-                    <option value="R&D">R&D</option>
-                    <option value="MARKET">MARKET</option>
-                    <option value="FINANCE">FINANCE</option>
+                    <option value="AI_RESEARCH">AI RESEARCH</option>
+                    <option value="OPEN_SOURCE_LLMS">OPEN SOURCE LLMS</option>
+                    <option value="AI_JOBS">AI JOBS</option>
+                    <option value="AI_INNOVATION">AI INNOVATION</option>
+                    <option value="OTHER">OTHER (Out of Domain)</option>
                   </select>
                 </div>
 
@@ -274,6 +315,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                     <option value="Real-time (High Load)">Real-time (High Load)</option>
                     <option value="Daily">Daily</option>
                     <option value="Weekly">Weekly</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1.5">Priority</label>
+                  <select
+                    value={newPriority}
+                    onChange={(e) => setNewPriority(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="HIGH">HIGH</option>
+                    <option value="MED">MED</option>
+                    <option value="LOW">LOW</option>
                   </select>
                 </div>
               </div>

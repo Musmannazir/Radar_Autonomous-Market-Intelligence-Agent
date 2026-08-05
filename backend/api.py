@@ -12,6 +12,7 @@ from tools.db import (
     add_watchlist_item,
     update_run_status,
     get_recent_briefings,
+    get_briefing_detail,
     log_briefing,
     list_watchlists,
     get_watchlist,
@@ -23,6 +24,23 @@ from tools.db import (
     ensure_schema,
 )
 from tools.run_events import get_run_events
+
+# AI-related keywords for topic validation
+AI_KEYWORDS = [
+    'ai', 'artificial intelligence', 'machine learning', 'ml', 'deep learning',
+    'llm', 'large language model', 'neural', 'gpt', 'claude', 'gemini', 'llama',
+    'transformer', 'generative', 'neural network', 'nlp', 'natural language',
+    'computer vision', 'cv', 'robotics', 'autonomous agent', 'ai agent',
+    'open source llm', 'ai jobs', 'ai research', 'ai innovation',
+    'mlops', 'mle', 'ml engineer', 'data science'
+]
+
+
+def is_ai_related(topic: str) -> bool:
+    """Check if a topic is AI-related using keyword matching."""
+    lower_topic = topic.lower()
+    return any(keyword in lower_topic for keyword in AI_KEYWORDS)
+
 
 ensure_schema()
 
@@ -123,6 +141,10 @@ class WatchlistUpdateRequest(BaseModel):
 class ApprovalRequest(BaseModel):
     action: str
     content: str | None = None
+
+
+class BriefingQueryRequest(BaseModel):
+    question: str
 
 
 def _run_graph(run_id: str, topic: str):
@@ -275,6 +297,10 @@ def run_watchlist(item_id: int, req: WatchlistRunRequest | None = None):
 
 @app.post("/watchlists")
 def create_watchlist(req: WatchlistCreateRequest):
+    # Validate that topic is AI-related
+    if not is_ai_related(req.name):
+        raise HTTPException(status_code=400, detail="Can't search - Out of Domain")
+
     item_id = add_watchlist_item(
         req.name,
         category=req.category,
@@ -375,6 +401,17 @@ def dashboard_metrics():
 
     current_run_events = get_run_events(latest_active["run_id"]) if latest_active else []
 
+    # No active run (e.g. the last run just finished) — fall back to the most
+    # recent run so the UI can still inspect per-node logs after completion.
+    if not current_run_events and active_runs:
+        with runs_lock:
+            most_recent_run = None
+            for rid, run in active_runs.items():
+                if most_recent_run is None or (run.get("started_at", "") or "") > (most_recent_run.get("started_at", "") or ""):
+                    most_recent_run = {**run, "run_id": rid}
+        if most_recent_run:
+            current_run_events = get_run_events(most_recent_run["run_id"])
+
     # Derive the active step from run events, which log "running" the moment a
     # node STARTS (stream_mode="updates" only fires on node completion, so it
     # lags a whole node behind during slow steps like the verifier).
@@ -429,8 +466,6 @@ def dashboard_metrics():
                 "queuePosition": queue_position,
             }
         )
-
-    current_run_events = get_run_events(latest_active["run_id"]) if latest_active else []
 
     return {
         "watchlists": watchlists,
@@ -500,6 +535,48 @@ def submit_approval(run_id: str, req: ApprovalRequest):
 @app.get("/briefings")
 def list_briefings(limit: int = 20):
     return {"briefings": get_recent_briefings(limit)}
+
+
+@app.get("/briefings/{run_id}")
+def get_briefing(run_id: str):
+    detail = get_briefing_detail(run_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Briefing not found")
+    return detail
+
+
+@app.post("/briefings/{run_id}/query")
+def query_briefing(run_id: str, req: BriefingQueryRequest):
+    from langchain_ollama import ChatOllama
+
+    detail = get_briefing_detail(run_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Briefing not found")
+
+    briefing_content = detail["content"]
+    findings_text = "\n".join(
+        f"- {f['claim']} (confidence: {f.get('confidence') or 'n/a'}, source: {f['source_url']})"
+        for f in detail["findings"]
+    )
+    topic = detail.get("topic", "unknown topic")
+
+    prompt = (
+        f'You are Radar AI, an intelligence analyst assistant. A user is asking a question '
+        f'about a briefing on "{topic}".\n\n'
+        f'BRIEFING CONTENT:\n{briefing_content}\n\n'
+        f'VERIFIED FINDINGS (claims with sources and confidence scores):\n{findings_text}\n\n'
+        f'Answer the user\'s question based ONLY on the briefing content and findings above. '
+        f'Be concise and specific. If the answer is not in the briefing content or findings, say so. '
+        f'Do not invent information.\n\n'
+        f'USER QUESTION: {req.question}'
+    )
+
+    try:
+        llm = ChatOllama(model="llama3.2:3b", temperature=0)
+        response = llm.invoke(prompt)
+        return {"answer": response.content.strip()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM query failed: {str(e)}")
 
 
 @app.get("/health")

@@ -30,14 +30,14 @@ def is_duplicate(claim: str, similarity_threshold: float = 0.75, coll=None) -> b
     print(f"[DEBUG] '{claim[:50]}...' -> similarity={similarity:.3f}")
     return similarity >= similarity_threshold
 
-def add_finding(claim: str, source_url: str, run_id: str, coll=None):
+def add_finding(claim: str, source_url: str, run_id: str, coll=None, confidence: float | None = None, is_new: bool = True):
     coll = coll or collection
     coll.add(
         documents=[claim],
         metadatas=[{"source_url": source_url, "run_id": run_id}],
         ids=[f"{run_id}::{hash(claim)}"],
     )
-    log_finding(run_id, claim, source_url, confidence=None, is_new=True)
+    log_finding(run_id, claim, source_url, confidence=confidence, is_new=is_new)
 
 def filter_new_findings(findings: list[dict], run_id: str, coll=None) -> list[dict]:
     coll = coll or collection
@@ -46,7 +46,7 @@ def filter_new_findings(findings: list[dict], run_id: str, coll=None) -> list[di
         if is_duplicate(f["claim"], coll=coll):
             print(f"[DUP] Skipping already-seen: {f['claim'][:60]}...")
             continue
-        add_finding(f["claim"], f["source_url"], run_id, coll=coll)
+        add_finding(f["claim"], f["source_url"], run_id, coll=coll, confidence=f.get("confidence"), is_new=True)
         f["is_new"] = True
         new_findings.append(f)
     return new_findings

@@ -62,7 +62,7 @@ def add_watchlist_item(
 def list_watchlists():
     conn = get_connection()
     rows = conn.execute(
-        "SELECT id, topic, active FROM watchlist ORDER BY id DESC"
+        "SELECT id, topic, active, category, frequency, priority, description, icon FROM watchlist ORDER BY id DESC"
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -71,7 +71,7 @@ def list_watchlists():
 def get_watchlist(item_id: int):
     conn = get_connection()
     row = conn.execute(
-        "SELECT id, topic, active FROM watchlist WHERE id = ?",
+        "SELECT id, topic, active, category, frequency, priority, description, icon FROM watchlist WHERE id = ?",
         (item_id,),
     ).fetchone()
     conn.close()
@@ -124,6 +124,49 @@ def get_recent_briefings(limit: int = 20):
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def get_briefing_detail(run_id: str):
+    """Return a briefing joined with its findings and the run's watchlist topic."""
+    conn = get_connection()
+
+    # 1. Briefing row
+    columns = _table_columns(conn, "briefings")
+    content_column = "content" if "content" in columns else "brief_text" if "brief_text" in columns else None
+    if not content_column:
+        conn.close()
+        return None
+
+    briefing_row = conn.execute(
+        f"SELECT id, run_id, {content_column} AS content, sent_at FROM briefings WHERE run_id = ?",
+        (run_id,),
+    ).fetchone()
+
+    if not briefing_row:
+        conn.close()
+        return None
+
+    briefing = dict(briefing_row)
+
+    # 2. Findings for this run
+    findings_rows = conn.execute(
+        "SELECT id, run_id, claim, source_url, confidence, is_new FROM findings WHERE run_id = ? ORDER BY id",
+        (run_id,),
+    ).fetchall()
+    briefing["findings"] = [dict(row) for row in findings_rows]
+
+    # 3. Topic from runs -> watchlist join
+    topic_row = conn.execute(
+        """SELECT w.topic
+           FROM runs r
+           LEFT JOIN watchlist w ON w.id = r.item_id
+           WHERE r.id = ?""",
+        (run_id,),
+    ).fetchone()
+    briefing["topic"] = dict(topic_row)["topic"] if topic_row and topic_row["topic"] else ""
+
+    conn.close()
+    return briefing
 
 
 def log_finding(run_id: str, claim: str, source_url: str, confidence: float | None, is_new: bool = True):

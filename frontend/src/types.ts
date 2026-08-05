@@ -13,7 +13,7 @@ export type NavTab =
 export interface WatchlistTopic {
   id: string;
   name: string;
-  category: 'TECHNOLOGY' | 'SECURITY' | 'COMPLIANCE' | 'R&D' | 'MARKET' | 'FINANCE';
+  category: 'AI_RESEARCH' | 'OPEN_SOURCE_LLMS' | 'AI_JOBS' | 'AI_INNOVATION' | 'OTHER';
   status: 'Active / Pulse' | 'Paused';
   lastRun: string;
   findingsCount: number;
@@ -45,7 +45,7 @@ export interface AIAgent {
 export interface Briefing {
   id: string;
   title: string;
-  category: 'INTELLIGENCE' | 'MARKET IMPACT' | 'REVIEW REQUIRED' | 'POLICY' | 'STRATEGIC';
+  category: 'AI_RESEARCH' | 'OPEN_SOURCE_LLMS' | 'AI_JOBS' | 'AI_INNOVATION' | 'OTHER';
   timeAgo: string;
   confidence: number;
   sourcesCount: number;

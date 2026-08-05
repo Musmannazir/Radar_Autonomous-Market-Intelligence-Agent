@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Briefing } from '../../types';
+import { radarApi } from '../../api/radarApi';
 
 interface BriefingsViewProps {
   briefings: Briefing[];
@@ -10,7 +11,7 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
   const [selectedBriefingId, setSelectedBriefingId] = useState<string>(briefings[0]?.id || '');
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [aiQuery, setAiQuery] = useState<string>('');
-  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [isQuerying, setIsQuerying] = useState<boolean>(false);
 
   const selectedBriefing = briefings.find((b) => b.id === selectedBriefingId) || briefings[0];
@@ -24,17 +25,22 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
     e.preventDefault();
     if (!aiQuery.trim() || !selectedBriefing) return;
 
-    // NOTE: this briefing was written by the real Radar backend, but there's
-    // no Q&A endpoint on the backend yet to answer follow-up questions about
-    // it. Rather than faking an answer, we say so plainly.
+    const question = aiQuery.trim();
+    setAiQuery('');
+    setConversationHistory((prev) => [...prev, { role: 'user', text: question }]);
     setIsQuerying(true);
-    setAiAnswer(null);
-    setTimeout(() => {
-      setAiAnswer(
-        "Ask Radar AI isn't wired to a backend endpoint yet — the backend currently only produces the briefing itself. Add a /briefings/{run_id}/query endpoint to enable this."
-      );
+
+    try {
+      const result = await radarApi.queryBriefing(selectedBriefing.id, question);
+      setConversationHistory((prev) => [...prev, { role: 'ai', text: result.answer }]);
+    } catch {
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: 'ai', text: 'Failed to get answer from Radar AI. Please try again.' },
+      ]);
+    } finally {
       setIsQuerying(false);
-    }, 300);
+    }
   };
 
   return (
@@ -49,17 +55,19 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide text-[10px] font-mono">
-            {['ALL', 'INTELLIGENCE', 'MARKET IMPACT', 'POLICY'].map((f) => (
+            {['ALL', 'AI_RESEARCH', 'OPEN_SOURCE_LLMS', 'AI_JOBS', 'AI_INNOVATION', 'OTHER'].map((f) => (
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
                 className={`px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
                   activeFilter === f
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold'
+                    ? f === 'OTHER'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold'
+                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold'
                     : 'bg-white/5 text-slate-400 hover:text-white border border-white/10'
                 }`}
               >
-                {f}
+                {f === 'OTHER' ? 'OUT OF DOMAIN' : f === 'ALL' ? 'ALL' : f.replace(/_/g, ' ')}
               </button>
             ))}
           </div>
@@ -74,7 +82,7 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
                 key={b.id}
                 onClick={() => {
                   setSelectedBriefingId(b.id);
-                  setAiAnswer(null);
+                  setConversationHistory([]);
                 }}
                 className={`w-full text-left p-4 rounded-2xl border transition-all ${
                   isSelected
@@ -83,8 +91,12 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
                 }`}
               >
                 <div className="flex items-center justify-between text-[10px] font-mono mb-1.5">
-                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                    {b.category}
+                  <span className={`px-2 py-0.5 rounded-full border ${
+                    b.category === 'OTHER'
+                      ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                      : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                  }`}>
+                    {b.category === 'OTHER' ? 'OUT OF DOMAIN' : b.category.replace(/_/g, ' ')}
                   </span>
                   <span className="text-slate-400">{b.timeAgo}</span>
                 </div>
@@ -110,8 +122,12 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
           <div className="p-6 border-b border-white/10 bg-slate-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">
-                  {selectedBriefing.category}
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                  selectedBriefing.category === 'OTHER'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                }`}>
+                  {selectedBriefing.category === 'OTHER' ? 'OUT OF DOMAIN' : selectedBriefing.category.replace(/_/g, ' ')}
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
                   Generated: {selectedBriefing.generatedDate}
@@ -227,13 +243,26 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
 
           {/* Bottom Ask Radar AI Query Drawer */}
           <div className="p-4 border-t border-white/10 bg-slate-950/80">
-            {aiAnswer && (
-              <div className="mb-3 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-white">
-                <div className="font-bold text-indigo-300 font-mono mb-1 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-base">psychology</span>
-                  Radar AI Context Answer:
-                </div>
-                <p className="text-xs leading-relaxed">{aiAnswer}</p>
+            {conversationHistory.length > 0 && (
+              <div className="mb-3 max-h-40 overflow-y-auto space-y-2 pr-1">
+                {conversationHistory.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`p-3 rounded-2xl text-xs ${
+                      msg.role === 'user'
+                        ? 'bg-white/5 border border-white/10 text-slate-200 ml-8'
+                        : 'bg-indigo-500/10 border border-indigo-500/30 text-white mr-8'
+                    }`}
+                  >
+                    <div className="font-bold font-mono mb-1 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-base">
+                        {msg.role === 'user' ? 'person' : 'psychology'}
+                      </span>
+                      {msg.role === 'user' ? 'You' : 'Radar AI'}
+                    </div>
+                    <p className="text-xs leading-relaxed">{msg.text}</p>
+                  </div>
+                ))}
               </div>
             )}
 

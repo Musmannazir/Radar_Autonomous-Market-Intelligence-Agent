@@ -145,6 +145,13 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
               <p className="text-xs text-slate-400 max-w-md">
                 The briefing for <span className="text-white font-medium">{pendingApproval.topic}</span> has been approved and delivered by email.
               </p>
+              <button
+                onClick={onApproveSuccess}
+                className="mt-6 px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-[0_4px_12px_rgba(99,102,241,0.4)] transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                Check for More Approvals
+              </button>
             </>
           )}
           {status === 'rejected' && (
@@ -156,6 +163,13 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
               <p className="text-xs text-slate-400 max-w-md">
                 The briefing for <span className="text-white font-medium">{pendingApproval.topic}</span> was not sent.
               </p>
+              <button
+                onClick={onApproveSuccess}
+                className="mt-6 px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-[0_4px_12px_rgba(99,102,241,0.4)] transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                Check for More Approvals
+              </button>
             </>
           )}
           {status === 'error' && (
@@ -165,6 +179,13 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
               </div>
               <h3 className="text-lg font-semibold text-white mb-1">Something Went Wrong</h3>
               <p className="text-xs text-slate-400 max-w-md">{errorMsg}</p>
+              <button
+                onClick={onApproveSuccess}
+                className="mt-6 px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-[0_4px_12px_rgba(99,102,241,0.4)] transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                Try Again
+              </button>
             </>
           )}
         </div>
@@ -174,6 +195,42 @@ export const ApprovalInterfaceView: React.FC<ApprovalInterfaceViewProps> = ({
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Status Banner - Shows Approved/Rejected state */}
+      {(status === 'approved' || status === 'rejected') && (
+        <div className={`p-4 rounded-2xl border flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 ${
+          status === 'approved'
+            ? 'bg-emerald-500/10 border-emerald-500/30'
+            : 'bg-amber-500/10 border-amber-500/30'
+        }`}>
+          <div className={`p-3 rounded-xl flex items-center justify-center ${
+            status === 'approved' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+          }`}>
+            <span className="material-symbols-outlined text-2xl">
+              {status === 'approved' ? 'check_circle' : 'cancel'}
+            </span>
+          </div>
+          <div>
+            <div className={`font-bold text-sm ${
+              status === 'approved' ? 'text-emerald-400' : 'text-amber-400'
+            }`}>
+              {status === 'approved' ? '✓ APPROVED & SENT' : '✗ REJECTED'}
+            </div>
+            <div className="text-xs text-slate-400 mt-0.5">
+              {status === 'approved'
+                ? `Briefing for "${pendingApproval.topic}" has been approved and delivered.`
+                : `Briefing for "${pendingApproval.topic}" was rejected and not sent.`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Banner */}
+      {status === 'error' && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+          {errorMsg}
+        </div>
+      )}
+
       {/* Approve Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
