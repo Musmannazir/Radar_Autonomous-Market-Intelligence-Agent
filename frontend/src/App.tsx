@@ -316,15 +316,31 @@ export function App() {
       setAgents(buildAgentFleet(metrics));
       setAgentStream(buildAgentStream(metrics));
       setEvaluations(
-        (evaluationsResponse.findings || []).slice(0, 20).map((finding, index) => ({
-          id: String(finding.id || index),
-          claim: finding.claim,
-          expectedResult: finding.source_url,
-          radarDecision: finding.is_new ? 'NEW SIGNAL' : 'DEDUPED',
-          confidence: Math.round((finding.confidence || 0) * 100),
-          status: finding.is_new ? 'WARN' : 'PASS',
-          decisionClass: finding.is_new ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-        }))
+        (evaluationsResponse.eval_results || []).slice(0, 20).map((item) => {
+          const status =
+            item.verdict === 'correct' ? 'PASS' :
+            item.verdict === 'missed' ? 'WARN' :
+            'FAIL'; // incorrect or false_positive
+          const radarDecision =
+            item.verdict === 'correct' ? `CONFIRMED (${item.expected_verdict.toUpperCase()})` :
+            item.verdict === 'missed' ? 'NOT DETECTED' :
+            item.verdict === 'false_positive' ? 'FALSE POSITIVE' :
+            'INCORRECT';
+          return {
+            id: item.id,
+            claim: item.claim,
+            expectedResult: `Expected: ${item.expected_verdict}`,
+            radarDecision,
+            confidence: item.confidence != null ? Math.round(item.confidence * 100) : 0,
+            status,
+            decisionClass:
+              status === 'PASS'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                : status === 'WARN'
+                ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                : 'bg-red-500/10 text-red-400 border border-red-500/20',
+          };
+        })
       );
     } catch {
       // Leave the UI empty when the backend is not available.

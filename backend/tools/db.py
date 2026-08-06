@@ -23,6 +23,10 @@ def ensure_schema():
         conn.execute("ALTER TABLE watchlist ADD COLUMN description TEXT")
     if "icon" not in watchlist_columns:
         conn.execute("ALTER TABLE watchlist ADD COLUMN icon TEXT")
+
+    runs_columns = _table_columns(conn, "runs")
+    if "rejection_reason" not in runs_columns:
+        conn.execute("ALTER TABLE runs ADD COLUMN rejection_reason TEXT")
     conn.commit()
     conn.close()
 
@@ -245,6 +249,43 @@ def log_briefing(run_id: str, brief_text: str, sent: bool = True):
         )
     conn.commit()
     conn.close()
+
+
+def save_rejection_reason(run_id: str, reason: str):
+    """Store the human feedback reason when a briefing is rejected."""
+    if not reason or not reason.strip():
+        return
+    conn = get_connection()
+    conn.execute(
+        "UPDATE runs SET rejection_reason = ? WHERE id = ?",
+        (reason.strip(), run_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_rejection_reasons_for_topic(topic: str, limit: int = 5) -> list[str]:
+    """Retrieve past rejection feedback for briefings on the same topic.
+
+    These are fed into the Writer agent prompt so it learns from past mistakes.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT r.rejection_reason
+        FROM runs r
+        LEFT JOIN watchlist w ON w.id = r.item_id
+        WHERE w.topic = ?
+          AND r.status = 'rejected'
+          AND r.rejection_reason IS NOT NULL
+          AND r.rejection_reason != ''
+        ORDER BY r.completed_at DESC
+        LIMIT ?
+        """,
+        (topic, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(row)["rejection_reason"] for row in rows]
 
 
 if __name__ == "__main__":

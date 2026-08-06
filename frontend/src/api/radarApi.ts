@@ -158,8 +158,28 @@ export interface DashboardEvaluationsResponse {
     precision: number;
     false_positive_rate: number;
     signal_quality: number;
+    total_eval_items?: number;
+    correct_items?: number;
+    total_findings?: number;
+    new_findings?: number;
+    high_confidence_new_findings?: number;
   };
+  eval_results: EvalCaseResult[];
   findings: DashboardMetricsResponse['findings'];
+  notes?: string;
+}
+
+export interface EvalCaseResult {
+  id: string;
+  claim: string;
+  source_url: string;
+  expected_verdict: 'confirmed' | 'rejected' | 'flagged';
+  category: string;
+  notes?: string;
+  detected: boolean;
+  verdict: 'correct' | 'incorrect' | 'missed' | 'false_positive';
+  matched_claim: string | null;
+  confidence: number | null;
 }
 
 async function handleRes<T>(res: Response): Promise<T> {
@@ -289,13 +309,62 @@ export const radarApi = {
     return handleRes(res);
   },
 
-  queryBriefing: async (runId: string, question: string): Promise<{ answer: string }> => {
+  /**
+   * Ask a question about a briefing. The backend streams tokens via SSE.
+   * If onToken is provided, it receives incremental text as tokens arrive.
+   * Returns a Promise that resolves with the full answer once the stream ends.
+   */
+  queryBriefing: async (
+    runId: string,
+    question: string,
+    onToken?: (accumulatedText: string) => void,
+  ): Promise<{ answer: string }> => {
     const res = await fetch(`${API_BASE}/briefings/${runId}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
     });
-    return handleRes(res);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Radar API error ${res.status}: ${text || res.statusText}`);
+    }
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let answer = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE lines from the buffer
+      const lines = buffer.split('\n');
+      // Keep the last (potentially incomplete) line in the buffer
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') {
+            return { answer };
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.text) {
+              answer += parsed.text;
+              onToken?.(answer);
+            }
+            if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+          } catch {
+            // Not valid JSON — skip
+          }
+        }
+      }
+    }
+    return { answer };
   },
 };
 

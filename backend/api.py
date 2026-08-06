@@ -1,12 +1,16 @@
+import json
 import uuid
 import threading
 import traceback
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from langgraph.types import Command
 from graph.supervisor import build_graph
+import config
 from tools.db import (
     create_run,
     add_watchlist_item,
@@ -23,6 +27,7 @@ from tools.db import (
     list_findings,
     ensure_schema,
     get_connection,
+    save_rejection_reason,
 )
 from tools.run_events import get_run_events
 
@@ -108,7 +113,42 @@ AGENT_FLEET_METRICS: dict[str, dict] = {
     role["id"]: {"success_count": 0, "failure_count": 0, "last_execution": None} for role in AGENT_FLEET_TEMPLATE
 }
 
-app = FastAPI(title="Radar API")
+# Cached LLM for the Ask-Radar-AI briefing query. Kept at module level so the
+# Ollama model stays warm between requests — a fresh ChatOllama per request
+# would force a full model reload (~2GB) on every question.
+_query_llm = None
+
+
+def get_query_llm():
+    """Return a cached LLM for briefing Q&A. Uses the fast hosted provider when
+    configured (Groq), otherwise the local Ollama model."""
+    global _query_llm
+    if _query_llm is None:
+        if config.VERIFIER_PROVIDER == "groq" and config.GROQ_API_KEY:
+            from langchain_groq import ChatGroq
+            _query_llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=config.GROQ_API_KEY, temperature=0)
+        else:
+            from langchain_ollama import ChatOllama
+            _query_llm = ChatOllama(model="llama3.2:3b", temperature=0)
+    return _query_llm
+
+
+def _warm_up_query_llm():
+    """Pre-load the local LLM in the background so the first briefing query
+    doesn't pay the 90s+ model-load cost. Non-fatal if it fails."""
+    try:
+        get_query_llm().invoke("Reply with exactly: ready")
+        print("[Radar] Briefing Q&A LLM warmed up.")
+    except Exception as e:
+        print(f"[Radar] Briefing Q&A LLM warm-up failed (non-fatal): {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    threading.Thread(target=_warm_up_query_llm, daemon=True).start()
+    yield
+
+app = FastAPI(title="Radar API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -564,6 +604,10 @@ def submit_approval(run_id: str, req: ApprovalRequest):
     decision = {"action": req.action}
     if req.action == "edit":
         decision["content"] = req.content or ""
+    elif req.action == "reject":
+        decision["reason"] = req.content or ""
+        # Persist the feedback so the Writer agent can learn from it next time
+        save_rejection_reason(run_id, req.content or "")
 
     with runs_lock:
         active_runs[run_id]["status"] = "processing_approval"
@@ -589,16 +633,21 @@ def get_briefing(run_id: str):
 
 @app.post("/briefings/{run_id}/query")
 def query_briefing(run_id: str, req: BriefingQueryRequest):
-    from langchain_ollama import ChatOllama
+    """
+    Answer a question about a briefing, streaming tokens back as SSE.
 
+    Uses a cached LLM (stays warm between requests). Prompts are truncated to
+    keep context within the model's window and speed up prefill.
+    """
     detail = get_briefing_detail(run_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Briefing not found")
 
-    briefing_content = detail["content"]
+    # Truncate to keep prompt inside the model's context window (~4096 tokens)
+    briefing_content = (detail["content"] or "")[:6000]
     findings_text = "\n".join(
         f"- {f['claim']} (confidence: {f.get('confidence') or 'n/a'}, source: {f['source_url']})"
-        for f in detail["findings"]
+        for f in detail["findings"][:20]
     )
     topic = detail.get("topic", "unknown topic")
 
@@ -613,12 +662,26 @@ def query_briefing(run_id: str, req: BriefingQueryRequest):
         f'USER QUESTION: {req.question}'
     )
 
-    try:
-        llm = ChatOllama(model="llama3.2:3b", temperature=0)
-        response = llm.invoke(prompt)
-        return {"answer": response.content.strip()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM query failed: {str(e)}")
+    llm = get_query_llm()
+
+    def _token_stream():
+        try:
+            buffer: list[str] = []
+            for chunk in llm.stream(prompt):
+                if chunk.content:
+                    buffer.append(chunk.content)
+                    # Flush every 5 chunks or on sentence/line boundaries to
+                    # reduce HTTP frame overhead while keeping a smooth feel.
+                    if len(buffer) >= 5 or any(c in chunk.content for c in '.!?\n:'):
+                        yield f"data: {json.dumps({'text': ''.join(buffer)})}\n\n"
+                        buffer = []
+            if buffer:
+                yield f"data: {json.dumps({'text': ''.join(buffer)})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(_token_stream(), media_type="text/event-stream")
 
 
 @app.get("/health")

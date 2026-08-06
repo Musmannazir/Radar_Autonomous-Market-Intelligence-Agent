@@ -8,6 +8,7 @@ def get_llm():
     if llm is None:
         llm = ChatOllama(model="llama3.2:3b", temperature=0)
     return llm
+
 WRITER_PROMPT = """You are writing a concise briefing for a team tracking: "{topic}"
 
 Below are NEW, verified findings since the last briefing, split into two groups.
@@ -21,9 +22,9 @@ labeled "Unconfirmed / needs review" section, explicitly noting they are uncerta
 
 For each finding: a brief "why it matters" note, and end with its source URL in parentheses.
 Do not invent anything beyond what's given. Keep it tight and professional. No markdown fences.
-"""
+{feedback_section}"""
 
-def write_briefing(topic: str, new_findings: list[dict]) -> str:
+def write_briefing(topic: str, new_findings: list[dict], past_rejection_feedback: list[str] | None = None) -> str:
     if not new_findings:
         return f"No new developments for '{topic}' since the last briefing."
 
@@ -36,10 +37,21 @@ def write_briefing(topic: str, new_findings: list[dict]) -> str:
             for f in findings
         ) or "(none)"
 
+    # Build the human feedback section so the writer learns from past rejections.
+    feedback_section = ""
+    if past_rejection_feedback:
+        feedback_lines = "\n".join(f"- \"{fb}\"" for fb in past_rejection_feedback[:3])
+        feedback_section = (
+            "\n\nIMPORTANT — PAST HUMAN FEEDBACK (learn from these to avoid repeating mistakes):\n"
+            f"{feedback_lines}\n"
+            "Apply this feedback when shaping the briefing above."
+        )
+
     prompt = WRITER_PROMPT.format(
         topic=topic,
         confirmed_text=fmt(confirmed),
         flagged_text=fmt(flagged),
+        feedback_section=feedback_section,
     )
     response = get_llm().invoke(prompt)
     return response.content.strip()

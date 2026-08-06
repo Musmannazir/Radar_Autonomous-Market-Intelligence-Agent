@@ -20,3 +20,4 @@ class AgentState(TypedDict):
     approval_status: str  # "pending" | "approved" | "edited" | "rejected"
     errors: Annotated[List[str], operator.add]
     next: Optional[str]  # supervisor routing decision: planner, researcher, verifier, dedup, writer, deliverer
+    rejection_reason: Optional[str]  # feedback from human rejection — fed into writer on next run

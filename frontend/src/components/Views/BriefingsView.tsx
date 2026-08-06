@@ -27,17 +27,31 @@ export const BriefingsView: React.FC<BriefingsViewProps> = ({ briefings, onRunRe
 
     const question = aiQuery.trim();
     setAiQuery('');
-    setConversationHistory((prev) => [...prev, { role: 'user', text: question }]);
+    setConversationHistory((prev) => [
+      ...prev,
+      { role: 'user', text: question },
+      { role: 'ai', text: '' },
+    ]);
     setIsQuerying(true);
 
     try {
-      const result = await radarApi.queryBriefing(selectedBriefing.id, question);
-      setConversationHistory((prev) => [...prev, { role: 'ai', text: result.answer }]);
+      await radarApi.queryBriefing(selectedBriefing.id, question, (accumulated) => {
+        // Update the last message (AI) with the accumulated streamed text
+        setConversationHistory((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'ai', text: accumulated };
+          return updated;
+        });
+      });
     } catch {
-      setConversationHistory((prev) => [
-        ...prev,
-        { role: 'ai', text: 'Failed to get answer from Radar AI. Please try again.' },
-      ]);
+      setConversationHistory((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: 'ai',
+          text: 'Failed to get answer from Radar AI. Please try again.',
+        };
+        return updated;
+      });
     } finally {
       setIsQuerying(false);
     }

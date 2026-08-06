@@ -117,9 +117,15 @@ def _writer_node(state: AgentState) -> dict:
     from agents.writer import write_briefing
     from tools.run_events import append_run_event
     from tools.run_events import record_cost
+    from tools.db import get_rejection_reasons_for_topic
     run_id = state.get("run_id", "")
+    topic = state["watchlist_item"]
     append_run_event(run_id, "writer", "running", f"Writing briefing from {len(state['new_findings'])} findings.")
-    briefing = write_briefing(state["watchlist_item"], state["new_findings"])
+
+    # Fetch past rejection feedback for this topic so the writer learns from mistakes
+    past_feedback = get_rejection_reasons_for_topic(topic, limit=3)
+
+    briefing = write_briefing(topic, state["new_findings"], past_rejection_feedback=past_feedback or None)
     record_cost(run_id, llm_calls=1)
     append_run_event(run_id, "writer", "completed", "Briefing draft composed.", {"preview": briefing[:500]})
     return {"briefing_draft": briefing}
@@ -159,8 +165,10 @@ def _deliverer_node(state: AgentState) -> dict:
     elif action == "edit":
         final_content = decision.get("content", briefing)
     else:
-        append_run_event(run_id, "deliverer", "completed", "Briefing rejected by human.")
-        return {"approval_status": "rejected"}
+        # Rejection — store the reason so the writer can learn from it next time.
+        reason = decision.get("reason", "")
+        append_run_event(run_id, "deliverer", "completed", "Briefing rejected by human.", {"reason": reason})
+        return {"approval_status": "rejected", "rejection_reason": reason}
 
     sent = send_briefing_email(subject=f"Radar Briefing: {state['watchlist_item']}", body=final_content)
     append_run_event(run_id, "deliverer", "completed", "Briefing delivered." if sent else "Send failed.")

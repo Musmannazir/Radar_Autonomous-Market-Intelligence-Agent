@@ -111,7 +111,7 @@ export const EvaluationsView: React.FC<EvaluationsViewProps> = ({ evaluations, s
         <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-lg font-bold text-white">Dataset Verification Cases</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Live findings returned by the backend</p>
+            <p className="text-xs text-slate-400 mt-0.5">Ground-truth eval suite compared against live pipeline findings</p>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs font-mono">
