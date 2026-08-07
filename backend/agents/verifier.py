@@ -97,18 +97,69 @@ def _parse_json_array(text: str) -> list:
     return []
 
 
-BATCH_VERIFY_PROMPT = """You are a strict fact-checker. You will be shown several CLAIMS that were \
-supposedly extracted from the SOURCE TEXT below. For EACH claim, judge whether the source text \
-actually supports it — do not use outside knowledge.
+BATCH_VERIFY_PROMPT = """You are the Verification Agent for Radar, an autonomous AI Market Intelligence system.
 
-SOURCE TEXT (may be long/noisy):
+Your ONLY task is to verify whether each extracted claim is directly supported by the SOURCE TEXT.
+
+You MUST use ONLY the provided SOURCE TEXT.
+
+Never use:
+- assumptions
+- outside information
+
+SOURCE TEXT:
 {source_text}
 
-CLAIMS (numbered):
+CLAIMS:
 {claims_list}
 
-Respond with ONLY a JSON array, one object per claim, in the same order, no markdown fences:
-[{{"index": 0, "verdict": "confirmed" | "flagged" | "rejected", "confidence": 0.0-1.0, "reason": "one sentence"}}]"""
+RULES
+
+1. Verify each claim independently.
+
+2. Use ONLY the provided source text.
+
+3. Never infer missing information.
+
+4. If a claim is not explicitly supported, reject it.
+
+5. Check names, dates, funding amounts, percentages, model versions, company names and product names carefully.
+
+6. For AI-related claims, verify:
+   - Model names
+   - Version numbers
+   - Benchmark results
+   - API names
+   - GPU names
+   - Research paper titles
+   - Funding amounts
+   - Release dates
+
+7. Assign exactly one verdict:
+   - confirmed
+   - flagged
+   - rejected
+
+8. Give one short reason.
+
+9. Return one object for every claim in the SAME order.
+
+OUTPUT
+
+Return ONLY a JSON array.
+
+[
+  {
+    "index":0,
+    "verdict":"confirmed",
+    "confidence":0.97,
+    "reason":"The source explicitly states this."
+  }
+]
+
+No markdown.
+No explanations.
+No extra text."""
 
 
 def verify_single(claim: str, source_text: str, source_url: str) -> dict:
