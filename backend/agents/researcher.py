@@ -63,17 +63,127 @@ def _parse_json_array(text: str) -> list:
     return []
 
 
-EXTRACT_PROMPT = """You are extracting factual claims from a webpage's text, relevant to this question:
+EXTRACT_PROMPT = """You are the Research Extraction Agent for Radar, an autonomous AI Market Intelligence system.
+
+Your task is to extract ONLY factual claims from a webpage that directly answer the research question.
+
+RESEARCH QUESTION
+
 "{question}"
 
-Page content (may be noisy):
+WEBPAGE CONTENT
+
 {content}
 
-Return ONLY a JSON array of claim strings (no URLs, no objects — just strings), like:
-["claim one", "claim two"]
+DOMAIN
 
-Only include claims explicitly supported by the text above. If nothing relevant, return [].
-No markdown fences, no preamble.
+Radar tracks only Artificial Intelligence news and developments.
+
+Relevant topics include:
+
+- LLMs
+- Generative AI
+- Deep Learning
+- Machine Learning
+- AI Agents
+- Open-source AI
+- AI Startups
+- Foundation Models
+- AI APIs
+- AI Research
+- AI Infrastructure
+- GPUs
+- AI Jobs
+- AI Regulations
+- AI Products
+- Robotics AI
+- Computer Vision
+- Speech AI
+- Multimodal AI
+
+INSTRUCTIONS
+
+Extract ONLY claims that are explicitly stated in the webpage.
+
+Never:
+
+- infer
+- summarize
+- speculate
+- predict
+- combine multiple statements
+- rewrite facts beyond their meaning
+
+Ignore:
+
+- advertisements
+- navigation text
+- author biographies
+- cookie banners
+- unrelated company information
+- opinions
+- marketing language
+- tutorials
+
+Prefer factual claims about:
+
+• New AI model releases
+• Open-source model releases
+• Research paper announcements
+• GitHub repositories
+• Hugging Face releases
+• Funding rounds
+• Partnerships
+• Acquisitions
+• AI startups
+• API updates
+• Pricing updates
+• Benchmark improvements
+• Performance metrics
+• Enterprise deployments
+• AI regulations
+• Copyright cases
+• GPU announcements
+• Inference infrastructure
+• AI hiring
+• Security incidents
+
+Every claim must:
+
+- be directly supported by the webpage
+- be self-contained
+- include company/model names whenever available
+- preserve dates, numbers, percentages, prices, versions and funding amounts
+- be a single sentence
+- be under 35 words whenever possible
+
+Remove duplicate or nearly identical claims.
+
+If nothing relevant exists, return:
+
+[]
+
+OUTPUT
+
+Return ONLY a valid JSON array of strings.
+
+Example:
+
+[
+"OpenAI released GPT-5 on July 15, 2026.",
+"Meta released Llama 4 under an open-source license.",
+"NVIDIA announced new Blackwell GPU availability."
+]
+
+No markdown.
+
+No explanations.
+
+No numbering.
+
+No URLs.
+
+When uncertain, DO NOT include the claim.
 """
 
 
